@@ -925,3 +925,72 @@ To connect these private addresses to the internet, we use a technology called *
 
 ---
 
+# 🏠 Private IP Address Classes & Ranges (RFC 1918)
+
+Hello Hashim! 👋
+
+Private IP addresses are specific addresses that are **not routed on the public Internet**. They are exclusively used within a **Local Area Network (LAN)**, such as your home, office, or an internal organizational network.
+
+Under the **RFC 1918** standard, these addresses are divided into three (3) specific classes.
+
+Let's understand these in detail with a table and a comprehensive explanation.
+
+---
+
+## 📊 Private IP Ranges Table
+
+| Class | CIDR (Prefix) | Range Start | Range End | Total IPs (Approx) | Where is it Used? |
+| --- | --- | --- | --- | --- | --- |
+| **Class A** | `/8` | `10.0.0.0` | `10.255.255.255` | 16 Million | Large Companies / Cloud (AWS/Azure) |
+| **Class B** | `/12` | `172.16.0.0` | `172.31.255.255` | 1 Million | Medium Companies / Universities |
+| **Class C** | `/16` | `192.168.0.0` | `192.168.255.255` | 65,536 | Home Routers / Small Offices |
+
+---
+
+### 1. Class A: "The Largest Range" 🏢
+
+* **Range:** `10.0.0.0` to `10.255.255.255`
+* **Mask:** `/8` (Default Subnet Mask: `255.0.0.0`)
+
+**Detail:**
+This range provides the highest number of IP addresses. This is why massive organizations and Cloud Service Providers (like AWS, Google Cloud, and Azure) utilize this range to ensure they never run out of available internal IP addresses.
+
+> **Note for you:** Hashim, the IP address you encountered previously, `10.0.2.15`, belongs to this **Class A Private range**.
+
+### 2. Class B: "The Confusion Point" 🏫
+
+* **Range:** `172.16.0.0` to `172.31.255.255`
+* **Mask:** The summary mask is `/12` (`255.240.0.0`).
+
+**Pay Attention:**
+Many people mistakenly believe that *any* IP starting with `172.` is a private IP. **This is incorrect.**
+
+* `172.15.x.x` = **Public IP** (Internet routable).
+* `172.16.x.x` to `172.31.x.x` = **Private IP** (Local Network use only).
+* `172.32.x.x` = **Public IP**.
+
+### 3. Class C: "Standard for Homes" 🏠
+
+* **Range:** `192.168.0.0` to `192.168.255.255`
+* **Mask:** `/16` (Default Subnet Mask: `255.255.0.0`, though it is frequently subnetted to `/24`).
+
+**Detail:**
+This is the range we encounter most frequently in our daily lives. Most home networking equipment, such as TP-Link, D-Link, and Huawei routers, use a default Gateway IP of `192.168.0.1` or `192.168.1.1`.
+
+---
+
+## 🛡️ What is the Benefit? (NAT)
+
+Since these addresses cannot function directly on the public Internet, we require a technology called **NAT (Network Address Translation)**.
+
+**How it works:**
+
+1. You use a private IP like `192.168.1.5` on your device at home.
+2. When you send a request (e.g., to open Google), your **Router** "hides" your private IP.
+3. The Router communicates with Google using its **Public IP**.
+4. When Google sends a reply, it sends it to the Router's Public IP.
+5. The Router then hands that data back to your specific private IP (`192.168.1.5`).
+
+This mechanism allows millions of people around the world to use the exact same Private IPs (like `192.168...`) simultaneously without causing any network conflicts! 🚀
+
+---
