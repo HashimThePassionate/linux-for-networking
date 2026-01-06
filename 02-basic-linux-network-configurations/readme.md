@@ -661,3 +661,135 @@ If you look at the `man` page (manual) for `ifconfig` versus `ip`, you will see 
 
 ---
 
+# 🛣️ Displaying Routing Information in Linux
+
+## 📘 Chapter Overview
+
+Routing is the process of selecting a path for network traffic. In this section, we will learn how to view the **Routing Table** on a Linux system. The routing table is like a map that tells your computer where to send data packets.
+
+We will cover:
+
+* The **Modern** command (`ip route`).
+* How the **Default Gateway** works.
+* Understanding **Link-Local Addresses** (APIPA).
+* The **Legacy** commands (`netstat` and `route`).
+
+---
+
+## 🚀 The Modern Command: `ip route`
+
+In modern Linux systems, we use the `ip` command for almost everything. To see routing information, we use `ip route`.
+
+### ⚡ Shortcut
+
+You can shorten this command to just `ip r`. Both commands do exactly the same thing.
+
+### 💻 Command Execution
+
+```bash
+hashim@Hashim:~$ ip route
+default via 10.0.2.2 dev enp0s3 proto dhcp src 10.0.2.15 metric 100 
+10.0.2.0/24 dev enp0s3 proto kernel scope link src 10.0.2.15 metric 100 
+
+```
+
+### 🔍 Detailed Explanation of the Output
+
+Let's break down the output line by line to understand exactly what the computer is doing.
+
+#### 1. The Default Route
+
+```text
+default via 10.0.2.2 dev enp0s3 ...
+
+```
+
+* **What it is:** This is the "Default Gateway."
+* **How it works:** If your computer tries to send a packet to an IP address that is **not** listed anywhere else in the routing table, it sends it here.
+* **The Logic:** The routing table always looks for the "Most Specific Route" first (a route that matches the destination IP exactly). If it finds no match, it falls back to this default route (which technically represents `0.0.0.0/0`, meaning "everything else").
+* **The Assumption:** Your computer assumes `10.0.2.2` is a router that knows how to forward the packet to the internet or other networks.
+
+#### 2. The Connected Route (Local Subnet)
+
+```text
+10.0.2.0/24 dev enp0s3 proto kernel scope link src 10.0.2.15 ...
+
+```
+
+* **What it is:** This is a "Connected Route."
+* **Meaning:** It tells the computer, "You are directly connected to the `10.0.2.0` network."
+* **Action:** If you want to talk to another computer on this same network (e.g., `10.0.2.50`), you do not need a router. You can talk to them directly through the interface `enp0s3`.
+
+---
+
+## 🧩 Special Address Types Explained
+
+The text mentions two other types of addresses you might see in a routing table, even if they aren't in the snippet above.
+
+### 1. Link-Local Addresses (169.254.0.0/16)
+
+You might see a route pointing to `169.254.0.0/16`.
+
+* **Definition:** This is a **Link-Local Address (LLA)** defined by **RFC 3927**.
+* **What is an RFC?** RFC stands for "Request for Comment." It is a document used by the **IETF** (Internet Engineering Task Force) to define internet standards.
+* **When is it used?**
+1. Your computer does not have a static IP.
+2. Your computer **cannot** find a DHCP server to give it an IP.
+3. As a last resort, it assigns itself an address starting with `169.254`.
+
+
+* **How it works:**
+* The computer picks the first two numbers (`169.254`).
+* It generates the last two numbers randomly.
+* It performs a check (using Ping/ARP) to make sure no one else is using that specific random address.
+
+
+* **Purpose:** It allows computers on the same wire to talk to each other without a router.
+* **Microsoft Name:** On Windows, this is called **APIPA** (Automatic Private Internet Protocol Addressing).
+
+### 2. Connected Subnet Example
+
+In some examples, you might see `192.168.122.0/24`. This is simply another example of a "Connected Route," telling the host that no routing is required for that specific range of IPs.
+
+---
+
+## 🏛️ The Legacy Commands: `netstat` and `route`
+
+On older systems (or for administrators who prefer old habits), there are different ways to see this same information. The most common legacy command is `netstat`.
+
+### 💻 Command: `netstat -rn`
+
+* `-r`: Show **Routing** table.
+* `-n`: Show **Numerical** addresses (do not try to resolve hostnames).
+
+```bash
+hashim@Hashim:~$ netstat -rn
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags   MSS Window  irtt Iface
+0.0.0.0         10.0.2.2        0.0.0.0         UG        0 0          0 enp0s3
+10.0.2.0        0.0.0.0         255.255.255.0   U         0 0          0 enp0s3
+
+```
+
+### 🔍 Output Comparison
+
+The information is the same as `ip route`, but the format is different:
+
+| Legacy Column | Modern Equivalent | Explanation |
+| --- | --- | --- |
+| **Destination 0.0.0.0** | `default` | The catch-all route. |
+| **Gateway 10.0.2.2** | `via 10.0.2.2` | Where to send the traffic. |
+| **Flags UG** | N/A | **U** = Up (Active), **G** = Gateway (Uses a router). |
+| **Iface enp0s3** | `dev enp0s3` | The physical network card used. |
+
+### ⚠️ The Challenge of Legacy Tools
+
+In the old "legacy" world, you have to learn multiple different commands for similar tasks:
+
+* `ifconfig` for interfaces.
+* `netstat` for routing tables.
+* `route` (another separate command) also shows routing tables.
+
+This overlap and the need to remember different syntax for every tool is why the modern **`ip`** command is superior. It unifies everything into one consistent logic.
+
+---
