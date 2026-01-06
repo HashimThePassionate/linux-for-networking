@@ -323,3 +323,220 @@ DESCRIPTION
 
 ---
 
+# 🖥️ Displaying Network Interface Information in Linux
+
+## 📘 Introduction
+
+Checking network interface information is one of the most common tasks for a Linux user. This is especially important when your network card (host adapter) is set to configure itself automatically using protocols like **DHCP** (Dynamic Host Configuration Protocol) or **IPv6 autoconfiguration**.
+
+In Linux, there are two ways to do this:
+
+1. **New Systems:** Use the `ip` command.
+2. **Old Systems:** Use the `ifconfig` command.
+
+This guide focuses on the modern **`ip` command**, which allows you to view and update IP addresses, routing tables, and other network details.
+
+---
+
+## 🚀 The `ip` Command: Displaying Information
+
+The `ip` command is the standard tool for managing network configurations. It is versatile and powerful.
+
+### 1. Viewing All IP Addresses
+
+To see the current configuration of all network interfaces on your system, use the command `ip address`.
+
+### 💻 Command
+
+```bash
+hashim@Hashim:~$ ip address
+```
+
+### 📤 Output Analysis
+
+When you run this command, you get detailed output about every interface. Here is the output from the example system:
+
+```text
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host noprefixroute 
+       valid_lft forever preferred_lft forever
+2: enp0s3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 08:00:27:55:08:5a brd ff:ff:ff:ff:ff:ff
+    altname enx08002755085a
+    inet 10.0.2.15/24 brd 10.0.2.255 scope global dynamic noprefixroute enp0s3
+       valid_lft 86173sec preferred_lft 86173sec
+
+```
+
+### 🔍 Detailed Explanation
+
+This output describes two interfaces:
+
+1. **Interface 1 (`lo`):**
+* **Name:** `lo` stands for **Loopback**. This is a virtual interface used by the computer to talk to itself.
+* **IP Address (`inet`):** `127.0.0.1`. This is the standard "home" address for the computer.
+* **Status:** `<LOOPBACK,UP...>` means it is active and functioning correctly.
+
+
+2. **Interface 2 (`enp0s3`):**
+* **Name:** `enp0s3`. This represents the physical (or virtualized) Ethernet network card.
+* **Hardware Address (`link/ether`):** `08:00:27:55:08:5a`. This is the MAC address.
+* **IPv4 Address (`inet`):** `10.0.2.15/24`. This is the actual IP address assigned to the machine on the network.
+* **Broadcast (`brd`):** `10.0.2.255`.
+* **Scope:** `global dynamic`. This implies the IP was likely assigned automatically via DHCP.
+
+
+
+---
+
+## ⚡ Using Command Shortcuts (Command Completion)
+
+The `ip` command is smart. It supports **command completion**. This means you do not have to type the full word `address`. You can type a shorter version, as long as it is unique enough for the system to understand.
+
+Both `ip addr` and `ip ad` produce the exact same result as `ip address`.
+
+### 💻 Command
+
+```bash
+hashim@Hashim:~$ ip addr
+```
+
+### 📤 Output
+
+```text
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host noprefixroute 
+       valid_lft forever preferred_lft forever
+2: enp0s3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 08:00:27:55:08:5a brd ff:ff:ff:ff:ff:ff
+    altname enx08002755085a
+    inet 10.0.2.15/24 brd 10.0.2.255 scope global dynamic noprefixroute enp0s3
+       valid_lft 86173sec preferred_lft 86173sec
+
+```
+
+This confirms that the shortened command works identically.
+
+---
+
+## 🧹 Filtering Output: IPv4 vs. IPv6
+
+The standard output often shows too much information, mixing **IPv4** (standard IP addresses) and **IPv6** (newer, longer addresses). You can filter this to see exactly what you want using flags.
+
+### 🔹 Option 1: Display Only IPv4
+
+Add the `-4` flag to the command.
+
+### 💻 Command
+
+```bash
+hashim@Hashim:~$ ip -4 ad
+```
+
+### 📤 Output
+
+```text
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: enp0s3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    altname enx08002755085a
+    inet 10.0.2.15/24 brd 10.0.2.255 scope global dynamic noprefixroute enp0s3
+       valid_lft 85614sec preferred_lft 85614sec
+
+```
+
+**Explanation:** All `inet6` (IPv6) lines are removed. You only see the `inet` lines (127.0.0.1 and 10.0.2.15).
+
+### 🔹 Option 2: Display Only IPv6
+
+Add the `-6` flag to the command.
+
+### 💻 Command
+
+```bash
+hashim@Hashim:~$ ip -6 ad
+```
+
+### 📤 Output
+
+```text
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 state UNKNOWN qlen 1000
+    inet6 ::1/128 scope host noprefixroute 
+       valid_lft forever preferred_lft forever
+
+```
+
+**Explanation:** The Ethernet interface (`enp0s3`) disappears completely because it does not have an IPv6 address configured in this example. Only the Loopback IPv6 address (`::1/128`) is shown.
+
+---
+
+## 📖 Understanding the Manual: `man ip`
+
+To fully master the `ip` command, you should check its manual page. You can access this by typing `man ip`.
+
+### 📜 Manual Page Preview
+
+```text
+IP(8)                               Linux                               IP(8)
+
+NAME
+       ip - show / manipulate routing, network devices, interfaces and tunnels
+
+SYNOPSIS
+       ip [ OPTIONS ] OBJECT { COMMAND | help }
+
+       ip [ -force ] -batch filename
+
+       OBJECT := { address | addrlabel | fou | help | ila | ioam | l2tp | link | macsec | maddress | monitor | mptcp | mroute
+               | mrule | neighbor | neighbour | netconf | netns | nexthop | ntable | ntbl | route | rule | sr | tap | tcpmet‐
+               rics | token | tunnel | tuntap | vrf | xfrm }
+
+       OPTIONS := { -V[ersion] | -h[uman-readable] | -s[tatistics] | -d[etails] | -r[esolve] | -iec | -f[amily] { inet | inet6
+               | link } | -4 | -6 | -B | -0 | -l[oops] { maximum-addr-flush-attempts } | -o[neline] | -rc[vbuf] [size] |
+               -t[imestamp] | -ts[hort] | -n[etns] name | -N[umeric] | -a[ll] | -c[olor] | -br[ief] | -j[son] | -p[retty] }
+
+OPTIONS
+       -V, -Version
+              Print the version of the ip utility and exit.
+
+       -h, -human, -human-readable
+              output statistics with human readable values followed by suffix.
+
+```
+
+### 🧠 How to Read This Syntax
+
+The synopsis line `ip [ OPTIONS ] OBJECT { COMMAND | help }` tells you how to construct a command:
+
+1. **`ip`**: The base command.
+2. **`[ OPTIONS ]`**: Optional settings that change *how* the command runs.
+* *Example:* `-4` (show only IPv4), `-h` (human-readable stats), `-c` (color).
+
+
+3. **`OBJECT`**: The specific network component you want to manage.
+* *Example:* `address` (IP addresses), `link` (network cards/cables), `route` (routing tables).
+
+
+4. **`{ COMMAND }`**: What you want to do with the object.
+* *Example:* `show`, `add`, `del` (delete).
+
+
+
+**Example construction:**
+
+* `ip` (Command)
+* `-4` (Option)
+* `address` (Object)
+* `show` (Command - often implied if omitted)
+
+This structure makes the `ip` command a complete toolkit for network management.
+
+
+---
