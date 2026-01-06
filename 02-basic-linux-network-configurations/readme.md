@@ -793,3 +793,135 @@ In the old "legacy" world, you have to learn multiple different commands for sim
 This overlap and the need to remember different syntax for every tool is why the modern **`ip`** command is superior. It unifies everything into one consistent logic.
 
 ---
+
+# 🌐 IPv4 Addresses and Subnet Masks: Deep Dive
+
+## 📘 Introduction to IPv4 Addressing
+
+In this section, we will explore IPv4 addressing in detail. An IPv4 address allows us to uniquely identify every device on a subnet. To do this, we use two components:
+
+1. **The IP Address:** The unique ID of the device (e.g., `192.168.122.182` or your specific IP `10.0.2.15`).
+2. **The Subnet Mask:** A filter that tells the computer which part of that address is the "Network" and which part is the "Host".
+
+---
+
+## 🧮 Practical Example: Our System's Binary Analysis
+Let's analyze the output you provided:
+
+**Our IP Information:**
+
+* **IP Address:** `10.0.2.15`
+* **Subnet Mask:** `/24` (which translates to `255.255.255.0`)
+
+To understand how the computer sees this, we must convert your Decimal (human) numbers into Binary (machine) numbers.
+
+### 1. Converting Your IP to Binary
+
+An IPv4 address is split into 4 "octets" (groups of 8 bits). Each bit represents a power of 2 </br>(128, 64, 32, 16, 8, 4, 2, 1).
+
+| Decimal Value | Calculation (Powers of 2) | Binary Result |
+| --- | --- | --- |
+| **10** | 8 + 2 | `00001010` |
+| **0** | 0 | `00000000` |
+| **2** | 2 | `00000010` |
+| **15** | 8 + 4 + 2 + 1 | `00001111` |
+
+**Your IP in Binary:**
+`00001010.00000000.00000010.00001111`
+
+### 2. Applying the Subnet Mask
+
+Your mask is `/24`. This means the first **24 bits** are turned "ON" (set to 1). This defines your network. The remaining 8 bits are for hosts.
+
+| Component | Decimal Format | Binary Format |
+| --- | --- | --- |
+| **IP Address** | `10.0.2.15` | `00001010.00000000.00000010.00001111` |
+| **Subnet Mask** | `255.255.255.0` | `11111111.11111111.11111111.00000000` |
+
+**The Result:**
+
+* **Network Portion:** `10.0.2` (Matches the `1`s in the mask).
+* **Host Portion:** `.15` (Matches the `0`s in the mask).
+* **Range:** Your host address can range from `1` to `254`.
+
+---
+
+## ✂️ Subnetting: "Sliding the Mask"
+
+What happens if we need a larger network? We simply "slide" the mask to the left.
+
+In the provided text, there is an example of changing a `/24` mask to a `/20` mask.
+
+### Comparing /24 vs /20
+
+When we change the mask to `/20`, we use only 20 bits for the network instead of 24.
+
+* **Mask in Binary (/20):** `11111111.11111111.11110000.00000000`
+* **Mask in Decimal:** `255.255.240.0`
+
+This small change massively increases the number of available hosts. Instead of just 254 hosts, a `/20` network can support **3,824 hosts** because it borrows extra bits from the third octet.
+
+> **Pro Tip:** Networking professionals should always keep a calculator handy that can convert Decimal to Binary and Hexadecimal.
+
+---
+
+## 📢 Special-Purpose Addresses
+
+There are specific addresses reserved for special tasks on a network.
+
+### 1. Broadcast Addresses
+
+The **Broadcast Address** is used to speak to *everyone* on the subnet at once. To find it, you set all the "Host" bits to `1`.
+
+**For Your IP (`10.0.2.15/24`):**
+
+* **Network:** `10.0.2`
+* **Host Bits (All 1s):** `11111111` (which is 255)
+* **Your Broadcast Address:** `10.0.2.255`
+
+### 2. Multicast Addresses
+
+Multicast is used to send data to a specific *group* of devices, like video screens or conference calls. These addresses usually look like `224.x.x.x`.
+
+#### 📋 Common Multicast Addresses (Extracted from Image)
+
+| Address | Description |
+| --- | --- |
+| `224.0.0.1` | All hosts on the subnet |
+| `224.0.0.2` | All routers in the subnet |
+| `224.0.0.12` | DHCP Servers and DHCP relay agents |
+| `224.0.0.18` | Devices participating in the VRRP protocol |
+| `224.0.0.102` | Devices participating in the **Hot Standby Router Protocol (HSRP)** |
+| `224.0.1.1` | All **Network Time Protocol (NTP)** servers |
+| `224.0.0.113` | AllJoyn hosts (used by Windows for device discovery) |
+
+---
+
+## 🏫 IPv4 Address Classes
+
+Historically, IP addresses were divided into "Classes" based on their leading bits. This is often the default setting in many operating systems.
+
+#### 📊 Address Class Table (Extracted from Image)
+
+| Class | Leading Bits | Default Subnet Mask | First Address | Last Address | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| **Class A** | `0` | `/8` (255.0.0.0) | `0.0.0.0` | `127.255.255.255` | Huge Networks |
+| **Class B** | `10` | `/16` (255.255.0.0) | `128.0.0.0` | `191.255.255.255` | Medium Networks |
+| **Class C** | `110` | `/24` (255.255.255.0) | `192.0.0.0` | `223.255.255.255` | Small Networks |
+| **Class D** | `1110` | N/A | `224.0.0.0` | `239.255.255.255` | **Multicast** |
+| **Class E** | `1111` | N/A | `240.0.0.0` | `255.255.255.255` | Reserved (Not in use) |
+
+---
+
+## 🏠 Private Addresses (RFC 1918)
+
+These are special addresses reserved for internal use within an organization. They are safe to use because they do not exist on the public internet.
+
+* **Class A Range:** `10.0.0.0/8` (This matches **your** current IP!)
+* **Class B Range:** `172.16.0.0` to `172.31.0.0` (`/12`)
+* **Class C Range:** `192.168.0.0/16`
+
+To connect these private addresses to the internet, we use a technology called **NAT** (Network Address Translation).
+
+---
+
