@@ -994,3 +994,145 @@ Since these addresses cannot function directly on the public Internet, we requir
 This mechanism allows millions of people around the world to use the exact same Private IPs (like `192.168...`) simultaneously without causing any network conflicts! 🚀
 
 ---
+
+# 🛠️ Assigning an IP Address to a Network Interface
+
+## 📘 Overview
+
+One of the most essential tasks when setting up a Linux server is assigning a **Permanent IPv4 Address**. While servers often get addresses automatically (via DHCP), a static (permanent) IP ensures the server is always reachable at the same location.
+
+We will cover two methods:
+
+1. **Modern Method:** Using `nmcli` (Network Manager Command Line).
+2. **Legacy Method:** Editing configuration files manually.
+
+---
+
+## 🚀 The Modern Method: `nmcli`
+
+On modern Linux systems, we use the **Network Manager Command Line** tool (`nmcli`). It is powerful, scriptable, and cleaner than editing files by hand.
+
+### 1️⃣ Step 1: Identify Your Connection
+
+First, we need to find the specific name of the network connection we want to configure.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo nmcli connection show
+```
+
+**Output:**
+
+```text
+NAME             UUID                                   TYPE      DEVICE 
+netplan-enp0s3   1eef7e45-3b9d-3043-bee3-fc5925c90273   ethernet  enp0s3 
+lo               1b3afd68-80a1-446d-9dfe-ad09777436dd   loopback  lo
+```
+
+* **Connection Name:** `netplan-enp0s3`
+* **Device Name:** `enp0s3` (This is the physical interface).
+
+> **Pro Tip:** You do not need to type the full name every time. You can use **Tab Completion**. Type the first few letters (e.g., `netp`) and press **Tab** to autocomplete the name. `nmcli` also accepts short commands like `con` for `connection` and `mod` for `modify`.
+
+### 2️⃣ Step 2: Configure the Network Parameters
+
+Now we will run a sequence of commands to set the IP, Gateway, DNS, and Addressing Mode.
+
+#### A. Set the IP Address
+
+We set the specific IP address and the subnet mask (using `/24` notation).
+
+```bash
+$ sudo nmcli connection modify "netplan-enp0s3" ipv4.addresses 10.0.2.22/24
+```
+
+#### B. Set the Default Gateway
+
+This tells the server where to send traffic meant for the internet.
+
+```bash
+$ sudo nmcli connection modify "netplan-enp0s3" ipv4.gateway 10.0.2.2
+```
+
+#### C. Set the DNS Server
+
+We configure the server to use Google's DNS (`8.8.8.8`) for resolving domain names.
+
+```bash
+$ sudo nmcli connection modify "netplan-enp0s3" ipv4.dns "8.8.8.8"
+```
+
+#### D. Set the Method to Manual
+
+This is crucial. We must tell the system to stop looking for automatic (DHCP) addresses and use the manual static settings we just provided. Note the use of shortened commands (`con mod`).
+
+```bash
+$ sudo nmcli con mod "netplan-enp0s3" ipv4.method manual
+```
+
+### 3️⃣ Step 3: Apply the Changes
+
+The changes are saved but not yet active. To make them "live," we must bring the connection up.
+
+**Command:**
+
+```bash
+$ sudo nmcli connection up "netplan-enp0s3"
+```
+
+**Output:**
+
+```text
+Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/5)
+```
+
+Your server now has a permanent static IP address! 🎉
+
+---
+
+## 🏛️ The Legacy Method: Editing Files
+
+In older Linux distributions, network configuration was done by manually editing text files. This method is tricky because file locations and names change depending on the OS (Ubuntu vs. CentOS vs. Debian).
+
+**⚠️ Warning:** On modern systems, this approach often fails because NetworkManager or Netplan overrides these manual file edits. This is **not backward compatible**.
+
+### 1️⃣ Changing DNS Servers
+
+To change where the computer looks for domain names, you edit the `resolv.conf` file.
+
+**File Location:** `/etc/resolv.conf`
+
+**Edit the content:**
+
+```text
+nameserver 8.8.8.8
+```
+
+### 2️⃣ Changing IP Address & Gateway
+
+To change the interface settings, you edit the interface configuration script.
+
+**File Location (Red Hat/CentOS style):** `/etc/sysconfig/network-scripts/ifcfg-eth0`
+
+**Edit the content to look like this:**
+
+```bash
+DEVICE=eth0
+BOOTPROTO=none         # "none" or "static" means no DHCP
+ONBOOT=yes             # Start this network when computer boots
+NETMASK=255.255.255.0
+IPADDR=10.0.1.27
+GATEWAY=10.0.2.2  # Add this if the gateway is on this interface
+```
+
+### 🔍 Comparison Summary
+
+| Feature | Modern (`nmcli`) | Legacy (File Edit) |
+| --- | --- | --- |
+| **Consistency** | Same command across most modern distros. | Varies wildly (file paths differ). |
+| **Safety** | Validates syntax before applying. | Typos can break networking instantly. |
+| **Activation** | Immediate with `connection up`. | Requires network service restart. |
+| **Compatibility** | Works on Ubuntu 20+, RHEL 8+, etc. | Mostly broken on modern systems. |
+
+---
