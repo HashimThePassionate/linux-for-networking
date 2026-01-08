@@ -165,3 +165,265 @@ This layered approach allows different vendors to work together.
 
 ---
 
+# 🛡️ Layer 2: Relating IP and MAC Addresses Using ARP
+
+## 📘 Chapter Overview
+
+While many people stop understanding networks at **Layer 3** (IP Addresses), a true networking professional must master **Layer 2** (Data Link Layer). This layer handles the physical identification of devices using **MAC Addresses** and manages local communication using **ARP** (Address Resolution Protocol).
+
+In this guide, we will explore how your specific Linux system handles these concepts, how to view the "hidden" tables that make networking work, and how to change your machine's identity (MAC spoofing).
+
+---
+
+## 🆔 Understanding MAC Addresses
+
+### 🧠 What is a MAC Address?
+
+A **MAC (Media Access Control)** address is a unique ID assigned to network interfaces. Ideally, it is "burned" into the hardware at the factory, but as you will see, it can be easily changed using software.
+
+* **Size:** 48-bits (12 hexadecimal digits).
+* **Format:** Usually written as pairs separated by colons (e.g., `00:0c:29...`) or dots.
+* **Function:** It allows devices on the **same local network** (like your home Wi-Fi or a specific VLAN) to talk to each other.
+
+### 🔄 How Communication Works (The ARP Process)
+
+When your computer wants to talk to an IP address (like `10.0.2.2`), it cannot send data directly to an IP. It needs the MAC address.
+
+1. **ARP Request:** Your computer shouts to the whole network: *"Who has IP `10.0.2.2`?"*
+2. **ARP Reply:** The device with that IP replies: *"That's me! My MAC address is `52:55:0a:00:02:02`."*
+3. **The Cache:** Your computer saves this answer so it doesn't have to ask again.
+
+---
+
+## 📋 The ARP Cache: Viewing Your Local Table
+
+Your system keeps a list of known MAC addresses in the **ARP Table**. Let's look at the actual output from your system.
+
+### 💻 Command: `arp -a`
+
+```bash
+hashim@Hashim:~$ arp -a
+_gateway (10.0.2.2) at 52:55:0a:00:02:02 [ether] on enp0s3
+```
+
+### 🔍 Detailed Explanation of Your Output
+
+* **`_gateway (10.0.2.2)`**: This is the device you are talking to (your Virtual Router).
+* **`at 52:55:0a:00:02:02`**: This is the Layer 2 MAC address of that router.
+* **`[ether]`**: The connection type is Ethernet.
+* **`on enp0s3`**: This is your network interface card.
+
+---
+
+## ⏱️ ARP Timers & The `/proc` Directory
+
+Network entries do not stay forever. If your computer stops talking to a device, it deletes the MAC address from the table to save space.
+
+### 📂 What is `/proc`?
+
+The `/proc` directory is a "Virtual Filesystem." These aren't real files on your hard drive; they are direct windows into the **kernel's memory**. Reading these files lets you see live system settings.
+
+### 💻 Checking ARP Timeout
+
+We can check how long an entry stays "stale" before being cleaned up.
+
+```bash
+hashim@Hashim:~$ cat /proc/sys/net/ipv4/neigh/enp0s3/gc_stale_time
+60
+```
+
+**What this means:**
+
+* **`60`**: Your system waits **60 seconds** before marking an inactive ARP entry as stale.
+* **Comparison:** Switches usually wait 5 minutes. Routers can wait up to 4 hours!
+
+> **Pro Tip:** If you replace a router but keep the same IP, your computer might try to talk to the *old* MAC address until this timer expires. Running the `arp` command to clear the table fixes this immediately.
+
+---
+
+## 📊 Viewing Network Statistics
+
+You can also use `/proc` to see raw network performance data, including errors and drops.
+
+### 💻 Command: `cat /proc/net/dev`
+
+```bash
+hashim@Hashim:~$ cat /proc/net/dev
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo:  162653     1851    0    0    0     0          0        0   162653     1851    0    0    0     0       0          0
+enp0s3: 45364612   32641    0    0    0     0          0        0   612552     4890    0    0    0     0       0          0
+```
+
+### 🔍 Analysis of Your Stats
+
+* **`enp0s3`**: This is your active interface.
+* **`Receive bytes` (45364612)**: Your system has downloaded about 45 MB of data.
+* **`Transmit bytes` (612552)**: Your system has uploaded about 600 KB.
+* **`errs / drop` (0)**: You have **Zero** errors or dropped packets. This means your connection is healthy and stable.
+
+---
+
+## 🛠️ Managing ARP Entries Manually
+
+Sometimes you need to manually control the ARP table.
+
+### 1. Adding a Static Entry
+
+This creates a permanent link between an IP and a MAC. It will never expire.
+
+```bash
+sudo arp -s 192.168.122.200 00:11:22:22:33:33
+```
+
+### 2. Deleting an Entry
+
+This forces your computer to "forget" a device so it has to ask "Who has this IP?" again.
+
+```bash
+sudo arp -i enp0s3 -d 192.168.122.200
+```
+
+### 3. Masquerading (Proxy ARP)
+
+This tells your computer to answer ARP requests on behalf of *another* IP address.
+
+```bash
+sudo arp -i enp0s3 -Ds 10.0.0.2 enp0s3 pub
+```
+
+---
+
+## 🎭 Changing the MAC Address (Spoofing)
+
+You demonstrated changing your MAC address. Let's look at why and how.
+
+### ❓ Why Change a MAC Address?
+
+* **Legitimate:** Your ISP might lock your internet to an old device's MAC. Spoofing lets your new router work.
+* **Privacy:** Devices like iPhones randomize their MAC to stop shopping malls from tracking your movement.
+* **Malicious:** Attackers spoof MACs to bypass security filters or impersonate trusted devices.
+
+### 🔍 Finding Your MAC Address
+
+You used `ip link show` to see your details.
+
+```bash
+hashim@Hashim:~$ ip link show enp0s3
+...
+link/ether 00:11:22:33:44:55 brd ff:ff:ff:ff:ff:ff permaddr 08:00:27:55:08:5a
+```
+
+* **`link/ether`**: This is your **current** (spoofed) MAC: `00:11:22:33:44:55`.
+* **`permaddr`**: This is your **permanent** (hardware) MAC: `08:00:27...`.
+
+### ⚙️ Method 1: The Temporary Way (Command Line)
+
+This change lasts until you restart the computer.
+
+```bash
+sudo ip link set dev enp0s3 down                 # Turn off interface
+sudo ip link set dev enp0s3 address 00:11:22:33:44:55  # Change MAC
+sudo ip link set dev enp0s3 up                   # Turn on interface
+```
+
+### ⚙️ Method 2: The Permanent Way (Netplan)
+
+You used `netplan` to make the change stick even after a reboot.
+
+**Your Configuration (`/etc/netplan/01-netcfg.yaml`):**
+
+```yaml
+network:
+  version: 2
+  ethernets:
+    enp0s3:
+      match:
+        macaddress: 08:00:27:55:08:5a  # Match the Real Card
+      macaddress: 00:11:22:33:44:55    # Apply the Fake MAC
+      dhcp4: true
+```
+
+### Apply the Configuration:
+
+```bash
+sudo netplan apply
+```
+
+# 🛠️ Changing MAC Address via Udev Rules
+
+This method represents the **lowest-level** and most powerful way to change a MAC address. We utilize **`udev` (User Space Device Manager)** to achieve this.
+
+When Linux boots up and detects hardware (such as your Network Interface Card), `udev` is the very first system that decides how to handle that hardware.
+
+Below is the detailed explanation of this method in English.
+
+---
+
+## 📂 Purpose of the File
+
+We create a new file located at: `/etc/udev/rules.d/75-mac-spoof.rules`.
+
+Inside this file, we define a **Rule** for Linux:
+
+> *"Whenever this specific Network Card is detected, immediately change its MAC address before any other software (like Netplan) takes control."*
+
+---
+
+## 💻 Code Breakdown
+
+It is essential to understand the syntax of the rule. Let's break down the command into its components:
+
+```bash
+ACTION=="add", SUBSYSTEM=="net", ATTR{address}=="XX:XX:XX:XX:XX:XX", RUN+="/usr/bin/ip link set dev enp0s3 address YY:YY:YY:YY:YY:YY"
+
+```
+
+| Component | Description |
+| --- | --- |
+| **`ACTION=="add"`** | This triggers when a new device is **Added** to the system (e.g., when the computer boots or a cable is plugged in). |
+| **`SUBSYSTEM=="net"`** | This ensures the rule only applies to devices within the **Network** category (ignoring other hardware like mice or keyboards). |
+| **`ATTR{address}=="XX..."`** | Here, you replace **"XX"** with your **Original Hardware MAC**. This tells the system: *"Only target the specific card that has this physical address."* |
+| **`RUN+="..."`** | If the conditions above are met, execute this **Command**. We use the `ip link` command here to swap the MAC address to **"YY"** (your Fake MAC). |
+
+---
+
+## 🚀 Step-by-Step Implementation
+
+If you wish to use this method instead of Netplan, follow these steps using your specific system details:
+
+### Step 1: Create the Rule File
+
+Run the following command in your terminal:
+
+```bash
+sudo nano /etc/udev/rules.d/75-mac-spoof.rules
+
+```
+
+### Step 2: Add the Rule
+
+Paste the following line into the file. The values have been updated to match your system:
+
+* **Target (Real MAC):** `08:00:27:55:08:5a`
+* **New (Fake MAC):** `00:11:22:33:44:55`
+* **Interface:** `enp0s3`
+
+```text
+ACTION=="add", SUBSYSTEM=="net", ATTR{address}=="08:00:27:55:08:5a", RUN+="/usr/bin/ip link set dev enp0s3 address 00:11:22:33:44:55"
+
+```
+
+### Step 3: Save and Reboot
+
+Save the file (`Ctrl+O`, `Enter`, `Ctrl+X`) and then restart your system.
+When the system comes back online, the MAC address will have been changed automatically during the boot process.
+
+---
+
+## ⚖️ Netplan vs. Udev: Which is Better?
+
+* **Netplan:** Easier to configure and is the standard for modern Ubuntu systems. **(Recommended for your current setup).**
+* **Udev:** Slightly more complex, but useful if Netplan is failing, or if you require the MAC address to be changed at the absolute earliest moment during the system boot sequence.
+
+---
