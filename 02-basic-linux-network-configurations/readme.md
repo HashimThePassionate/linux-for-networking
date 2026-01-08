@@ -1311,3 +1311,477 @@ hashim@Hashim:~$ sudo ifconfig enp0s3 up
 If you are connected to the Linux machine remotely (for example, using **SSH**), disabling the network interface (`down`) will immediately disconnect you. You will lose control of the server and will not be able to send the `up` command to reconnect. Always be careful when modifying active interfaces remotely.
 
 ---
+
+# 📦 Setting the MTU on a Network Interface
+
+## 📘 Overview: What is MTU?
+
+In modern networking, a common configuration task is setting the **MTU** (Message Transfer Unit).
+
+* **Definition:** MTU is the size of the largest **Protocol Datagram Unit** (PDU)—often called a **frame**—that a network interface can send or receive.
+* **Standard Size:** On standard Ethernet networks, the default MTU is **1,500 bytes**. This means the maximum size of a single packet is 1,500 bytes.
+* **MSS:** The maximum packet size for a specific type of media is often referred to as the **Maximum Segment Size** (MSS).
+
+---
+
+## 📊 Understanding Frame Sizes
+
+Different network scenarios require different packet sizes. The table below illustrates the relationship between frame size, MTU, and usage.
+
+| Parameter | Standard Value | Description |
+| --- | --- | --- |
+| **MTU** | 1,500 Bytes | The default payload size for standard Ethernet. |
+| **Jumbo Frame** | ~9,000 Bytes | Used for high-performance data center traffic to reduce overhead. |
+| **Small Frame** | < 1,500 Bytes | Used for Tunnels, VPNs, or Satellite links where extra headers take up space. |
+
+### ❓ Why Would We Need to Change This?
+
+The standard **1,500-byte** size is a widely accepted compromise. It is small enough that transmission errors are detected quickly, and re-sending lost data doesn't take much time. However, specific use cases require adjustments:
+
+#### 1. 🚀 Increasing MTU (Jumbo Frames)
+
+In data centers, larger packets allow servers to send more data with less CPU processing (overhead).
+
+* **Target MTU:** ~9,000 bytes (Jumbo Packet).
+* **Network Speed:** Used on 1 Gbps, 10 Gbps, or faster connections.
+* **Use Cases:**
+* Storage traffic (e.g., iSCSI).
+* System Backups.
+* Virtual Machine migration (VMware vMotion, Hyper-V Live Migration).
+
+
+
+#### 2. 📉 Decreasing MTU (Small Frames)
+
+Sometimes, packets must be smaller than 1,500 bytes.
+
+* **The Problem:** Many applications set a **DF (Don't Fragment)** flag on their packets. If they send a 1,500-byte packet across a link that only supports 1,380 bytes (due to overhead), the packet is dropped, and the application crashes or fails silently.
+* **Use Cases:**
+* **VPNs & Tunnels:** Wrapping a packet inside another packet (encapsulation) adds extra headers, leaving less room for the actual data.
+* **Satellite Links:** These often use very small frames (e.g., 512 bytes).
+
+
+
+---
+
+## 🛠️ Configuration Example: Setting MTU to 9000
+
+We will now configure your specific connection (`netplan-enp0s3`) to use **Jumbo Frames** (MTU 9000). We will use the **Network Manager Command Line** (`nmcli`) tool.
+
+### 1️⃣ Step 1: Modify the Connection
+
+We verify the connection name and modify the `802-3-ethernet.mtu` setting.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo nmcli connection modify "netplan-enp0s3" 802-3-ethernet.mtu 9000
+```
+
+**Explanation:**
+
+* `connection modify`: Tells Network Manager to update an existing profile.
+* `"netplan-enp0s3"`: The specific connection profile we are editing.
+* `802-3-ethernet.mtu 9000`: Sets the MTU property for Ethernet to 9000 bytes.
+
+### 2️⃣ Step 2: Apply the Changes
+
+Changes in `nmcli` are saved to the configuration file but are not active until the connection is reloaded.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo nmcli connection up "netplan-enp0s3"
+```
+
+**Output:**
+
+```text
+Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/7)
+
+```
+
+### 3️⃣ Step 3: Verify the Change
+
+We use the `ip` command to confirm the interface is actually using the new size.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ ip ad | grep mtu
+```
+
+**Output:**
+
+```text
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+2: enp0s3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 9000 qdisc fq_codel state UP group default qlen 1000
+
+```
+
+**Analysis:**
+Notice that `enp0s3` now shows **`mtu 9000`**. The configuration was successful.
+
+---
+
+## ⚡ Advanced: Using `nmcli` Interactive Mode
+
+The `nmcli` tool includes a powerful "interactive mode" (a shell) that lets you view and edit settings without typing long commands repeatedly.
+
+### 1️⃣ Entering the Shell & Viewing Properties
+
+To start editing, use the `connection edit` command. Once inside, you can type `print` to see **every single detail** of the connection.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo nmcli connection edit "netplan-enp0s3"
+```
+
+**Output & Interaction:**
+
+```text
+===| nmcli interactive connection editor |===
+
+Editing existing '802-3-ethernet' connection: 'netplan-enp0s3'
+
+Type 'help' or '?' for available commands.
+Type 'print' to show all the connection properties.
+Type 'describe [<setting>.<prop>]' for detailed property description.
+
+You may edit the following settings: connection, 802-3-ethernet (ethernet), 802-1x, dcb, sriov, ethtool, match, ipv4, ipv6, hostname, link, tc, proxy
+nmcli> print
+
+```
+
+**Full Connection Details:**
+
+```text
+===============================================================================
+                  Connection profile details (netplan-enp0s3)
+===============================================================================
+connection.id:                          netplan-enp0s3
+connection.uuid:                        1eef7e45-3b9d-3043-bee3-fc5925c90273
+connection.stable-id:                   --
+connection.type:                        802-3-ethernet
+connection.interface-name:              enp0s3
+connection.autoconnect:                 yes
+connection.autoconnect-priority:        0
+connection.autoconnect-retries:         -1 (default)
+connection.multi-connect:               0 (default)
+connection.auth-retries:                -1
+connection.timestamp:                   1767873502
+connection.permissions:                 --
+connection.zone:                        --
+connection.controller:                  --
+connection.master:                      --
+connection.slave-type:                  --
+connection.port-type:                   --
+connection.autoconnect-slaves:          -1 (default)
+connection.autoconnect-ports:           -1 (default)
+connection.down-on-poweroff:            -1 (default)
+connection.secondaries:                 --
+connection.gateway-ping-timeout:        0
+connection.ip-ping-timeout:             0
+connection.ip-ping-addresses:           --
+connection.ip-ping-addresses-require-all:-1 (default)
+connection.metered:                     unknown
+connection.lldp:                        default
+connection.mdns:                        -1 (default)
+connection.llmnr:                       -1 (default)
+connection.dns-over-tls:                -1 (default)
+connection.mptcp-flags:                 0x0 (default)
+connection.wait-device-timeout:         -1
+connection.wait-activation-delay:       -1
+-------------------------------------------------------------------------------
+802-3-ethernet.port:                    --
+802-3-ethernet.speed:                   0
+802-3-ethernet.duplex:                  --
+802-3-ethernet.auto-negotiate:          no
+802-3-ethernet.mac-address:             --
+802-3-ethernet.cloned-mac-address:      --
+802-3-ethernet.generate-mac-address-mask:--
+802-3-ethernet.mac-address-denylist:    --
+802-3-ethernet.mtu:                     9000
+802-3-ethernet.s390-subchannels:        --
+802-3-ethernet.s390-nettype:            --
+802-3-ethernet.s390-options:            --
+802-3-ethernet.wake-on-lan:             --
+802-3-ethernet.wake-on-lan-password:    --
+802-3-ethernet.accept-all-mac-addresses:-1 (default)
+-------------------------------------------------------------------------------
+ipv4.method:                            auto
+ipv4.dns:                               8.8.8.8
+ipv4.dns-search:                        --
+ipv4.dns-options:                       --
+ipv4.dns-priority:                      0
+ipv4.addresses:                         10.0.2.22/24
+ipv4.gateway:                           10.0.2.2
+ipv4.routes:                            { ip = 10.30.30.0/24, nh = 10.0.2.101 }
+ipv4.route-metric:                      -1
+ipv4.route-table:                       0 (unspec)
+ipv4.routing-rules:                     --
+ipv4.replace-local-rule:                -1 (default)
+ipv4.dhcp-send-release:                 -1 (default)
+ipv4.routed-dns:                        -1 (default)
+ipv4.ignore-auto-routes:                no
+ipv4.ignore-auto-dns:                   no
+ipv4.dhcp-client-id:                    --
+ipv4.dhcp-iaid:                         --
+ipv4.dhcp-dscp:                         --
+ipv4.dhcp-timeout:                      0 (default)
+ipv4.dhcp-send-hostname-deprecated:     yes
+ipv4.dhcp-send-hostname:                -1 (default)
+ipv4.dhcp-hostname:                     --
+ipv4.dhcp-fqdn:                         --
+ipv4.dhcp-hostname-flags:               0x0 (none)
+ipv4.never-default:                     no
+ipv4.may-fail:                          yes
+ipv4.required-timeout:                  -1 (default)
+ipv4.dad-timeout:                       -1 (default)
+ipv4.dhcp-vendor-class-identifier:      --
+ipv4.dhcp-ipv6-only-preferred:          -1 (default)
+ipv4.link-local:                        0 (default)
+ipv4.dhcp-reject-servers:               --
+ipv4.auto-route-ext-gw:                 -1 (default)
+ipv4.shared-dhcp-range:                 --
+ipv4.shared-dhcp-lease-time:            0 (default)
+-------------------------------------------------------------------------------
+ipv6.method:                            disabled
+ipv6.dns:                               --
+ipv6.dns-search:                        --
+ipv6.dns-options:                       --
+ipv6.dns-priority:                      0
+ipv6.addresses:                         --
+ipv6.gateway:                           --
+ipv6.routes:                            --
+ipv6.route-metric:                      -1
+ipv6.route-table:                       0 (unspec)
+ipv6.routing-rules:                     --
+ipv6.replace-local-rule:                -1 (default)
+ipv6.dhcp-send-release:                 -1 (default)
+ipv6.routed-dns:                        -1 (default)
+ipv6.ignore-auto-routes:                no
+ipv6.ignore-auto-dns:                   no
+ipv6.never-default:                     no
+ipv6.may-fail:                          yes
+ipv6.required-timeout:                  -1 (default)
+ipv6.ip6-privacy:                       -1 (default)
+ipv6.temp-valid-lifetime:               0 (default)
+ipv6.temp-preferred-lifetime:           0 (default)
+ipv6.addr-gen-mode:                     default-or-eui64
+ipv6.ra-timeout:                        0 (default)
+ipv6.mtu:                               auto
+ipv6.dhcp-pd-hint:                      --
+ipv6.dhcp-duid:                         --
+ipv6.dhcp-iaid:                         --
+ipv6.dhcp-timeout:                      0 (default)
+ipv6.dhcp-send-hostname-deprecated:     yes
+ipv6.dhcp-send-hostname:                -1 (default)
+ipv6.dhcp-hostname:                     --
+ipv6.dhcp-hostname-flags:               0x0 (none)
+ipv6.auto-route-ext-gw:                 -1 (default)
+ipv6.token:                             --
+-------------------------------------------------------------------------------
+proxy.method:                           none
+proxy.browser-only:                     no
+proxy.pac-url:                          --
+proxy.pac-script:                       --
+-------------------------------------------------------------------------------
+
+```
+
+### 2️⃣ Modifying Settings Interactively
+
+In this session, we will:
+
+1. **Revert** the MTU back to `auto`.
+2. **Manually set** a new IP, Gateway, and DNS.
+
+**Interactive Session:**
+
+```bash
+nmcli> set 802-3-ethernet.mtu auto
+nmcli> set ipv4.addresses 10.0.2.23/24
+Do you also want to set 'ipv4.method' to 'manual'? [yes]: 
+nmcli> set ipv4.gateway 10.0.2.2
+nmcli> set ipv4.dns 8.8.8.8
+nmcli> save
+Connection 'netplan-enp0s3' (1eef7e45-3b9d-3043-bee3-fc5925c90273) successfully updated.
+nmcli> quit
+```
+
+**Step-by-Step Logic Explanation:**
+
+1. **`set 802-3-ethernet.mtu auto`**: This command removes the hardcoded 9000 value, allowing the system to negotiate the default MTU (usually 1500).
+2. **`set ipv4.addresses 10.0.2.23/24`**: We assign a new Static IP (`.23`).
+3. **The Prompt (`[yes]`):** The `nmcli` tool is smart. It sees you are adding a static IP, so it asks if you want to switch the method from `auto` (DHCP) to `manual`. Pressing **Enter** accepts the default "Yes".
+4. **`set ipv4.gateway` & `dns**`: We define the router and Google DNS so the machine can surf the web.
+5. **`save`**: Commits the changes to the disk.
+6. **`quit`**: Exits the shell.
+
+This interactive mode is ideal for scripting, allowing administrators to push complex network changes to thousands of stations efficiently.
+
+
+---
+
+
+Here is the professional README documentation for the specific task of removing the IP address `10.0.2.23`.
+
+---
+
+# 🗑️ Removing a Specific Static IP Address
+
+This guide documents the precise steps to clean up your network configuration by removing an unwanted Static IP address. In this specific scenario, we are removing the secondary IP address **`10.0.2.23/24`** from the `netplan-enp0s3` connection using the **Network Manager CLI (nmcli)** interactive mode.
+
+## 📋 Prerequisites
+
+* **Operating System:** Ubuntu Linux (or any distribution using Network Manager).
+* **Access:** You must have `sudo` (administrative) privileges.
+* **Tool:** We will use the `nmcli` interactive editor for safety and precision.
+
+---
+
+## 🛠️ Step-by-Step Implementation
+
+Follow these steps to safely remove the IP address without disrupting other configurations.
+
+### 1. Check Current IP Status
+
+Before making any changes, it is best practice to verify which IP addresses are currently assigned to your interface.
+
+**Command:**
+
+```bash
+ip -4 ad
+
+```
+
+**Explanation:**
+
+* **`ip`**: The main command for network monitoring.
+* **`-4`**: Filters the output to show only IPv4 addresses (hides complicated IPv6 details).
+* **`ad`**: Short for `address`, listing the IP details.
+* **Output Analysis:** Look for `10.0.2.23/24` in the list. It might be listed as `secondary`.
+
+---
+
+### 2. Enter the Interactive Editor
+
+Instead of typing complex long commands, we enter the `nmcli` interactive shell. This allows us to see exactly what we are changing.
+
+**Command:**
+
+```bash
+sudo nmcli connection edit "netplan-enp0s3"
+
+```
+
+**Explanation:**
+
+* **`sudo`**: Grants permission to modify system network settings.
+* **`connection edit`**: Opens the configuration menu for a specific connection.
+* **`"netplan-enp0s3"`**: The specific name of the connection profile we are modifying.
+
+---
+
+### 3. Verify Settings Before Deletion
+
+Once inside the editor (you will see the `nmcli>` prompt), check the list of currently assigned IP addresses to ensure you target the correct one.
+
+**Command:**
+
+```bash
+nmcli> print ipv4
+
+```
+
+**Explanation:**
+
+* **`print ipv4`**: Displays all IPv4-related settings.
+* **Target:** You should see `ipv4.addresses: 10.0.2.22/24, 10.0.2.23/24` (or similar).
+
+---
+
+### 4. Remove the Unwanted IP (`10.0.2.23`)
+
+Now, we execute the removal command. This command surgically removes only the specific IP you type, leaving other IPs (like `.22`) untouched.
+
+**Command:**
+
+```bash
+nmcli> remove ipv4.addresses 10.0.2.23/24
+
+```
+
+**Explanation:**
+
+* **`remove`**: The action to delete a value from a list.
+* **`ipv4.addresses`**: The specific setting field we are modifying.
+* **`10.0.2.23/24`**: The exact value we want to delete.
+
+> **Note:** If the system asks: *"Do you also want to set 'ipv4.method' to 'manual'? [yes]:"*, simply press **Enter**. This confirms that you still want to manage IPs manually.
+
+---
+
+### 5. Save and Exit
+
+The changes are currently only in temporary memory. You must save them to the configuration file.
+
+**Commands:**
+
+```bash
+nmcli> save
+nmcli> quit
+
+```
+
+**Explanation:**
+
+* **`save`**: writes the changes to the persistent connection file on the disk.
+* **`quit`**: Exits the interactive `nmcli>` shell and returns you to the standard terminal.
+
+---
+
+### 6. Apply Changes (Restart Connection)
+
+Linux often caches (remembers) old IP addresses even after you change the settings file. To force the system to drop the old IP (`10.0.2.23`), you must fully restart the connection.
+
+**Commands:**
+
+```bash
+sudo nmcli connection down "netplan-enp0s3"
+sudo nmcli connection up "netplan-enp0s3"
+
+```
+
+**Explanation:**
+
+* **`down`**: Completely deactivates the interface, flushing out all current IP addresses.
+* **`up`**: Reactivates the interface, loading *only* the new configuration (without the deleted IP).
+
+---
+
+### 7. Final Verification
+
+Confirm that the operation was successful and the IP address `10.0.2.23` is gone.
+
+**Command:**
+
+```bash
+ip -4 ad
+
+```
+
+**Expected Result:**
+You should no longer see `10.0.2.23` in the output. The interface should now only show your remaining Primary IP (e.g., `10.0.2.22`) and the Loopback address.
+
+---
+
+### 🎯 Success!
+
+You have successfully removed the specific static IP address while maintaining your network configuration.
+
+---
+
+
