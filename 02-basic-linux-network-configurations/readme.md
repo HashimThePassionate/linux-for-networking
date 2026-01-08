@@ -1136,3 +1136,178 @@ GATEWAY=10.0.2.2  # Add this if the gateway is on this interface
 | **Compatibility** | Works on Ubuntu 20+, RHEL 8+, etc. | Mostly broken on modern systems. |
 
 ---
+
+
+
+# 🛣️ Adding and Managing Network Routes in Linux
+
+## 📘 Overview
+
+This guide provides a detailed walkthrough on how to configure network routes on your Linux host. We will cover adding **temporary routes** using the `ip` command, **permanent routes** using `nmcli`, and legacy methods for older systems. Additionally, we will explore how to safely disable and enable network interfaces.
+
+---
+
+## 📍 Adding a Temporary Route
+
+To add a static route that works immediately but disappears after a reboot, we use the `ip` command.
+
+In this example, we configure the host to route traffic destined for the **10.20.20.0/24** network through the gateway **10.0.2.100**.
+
+### 💻 Command
+
+```bash
+hashim@Hashim:~$ sudo ip route add 10.20.20.0/24 via 10.0.2.100 dev enp0s3
+```
+
+### 🔍 Detailed Command Explanation
+
+* **`sudo`**: Executes the command with administrator (root) privileges.
+* **`ip route add`**: The core command to insert a new entry into the routing table.
+* **`10.20.20.0/24`**: The **Target Network**. This is the destination we want to reach.
+* **`via 10.0.2.100`**: The **Gateway**. This specifies the IP address of the router that knows how to get to the destination.
+* **`dev enp0s3`**: The **Device**. This explicitly forces the traffic to go out through the `enp0s3` network interface.
+
+### 📤 Verification Output
+
+After running the command, we verify the routing table.
+
+```bash
+hashim@Hashim:~$ ip route
+default via 10.0.2.2 dev enp0s3 proto static metric 100 
+10.0.2.0/24 dev enp0s3 proto kernel scope link src 10.0.2.22 metric 100 
+10.0.2.0/24 dev enp0s3 proto kernel scope link src 10.0.2.15 metric 100 
+10.20.20.0/24 via 10.0.2.100 dev enp0s3 
+```
+
+**Observation:** You can see the new line `10.20.20.0/24 via 10.0.2.100` is now active.
+
+> **⚠️ Important Note:** This is a **temporary** route. If you restart the computer or the network service, this route will be deleted.
+
+---
+
+## 🔒 Adding a Permanent Route (Using `nmcli`)
+
+To ensure a route survives a reboot, we use the **Network Manager Command Line** (`nmcli`) tool.
+
+### 1️⃣ Step 1: Identify the Connection Name
+
+First, we list the active connections to find the correct name.
+
+```bash
+hashim@Hashim:~$ sudo nmcli connection show
+NAME            UUID                                  TYPE      DEVICE 
+netplan-enp0s3  1eef7e45-3b9d-3043-bee3-fc5925c90273  ethernet  enp0s3 
+lo              53f1ef76-bb34-4ec0-877a-735fea6ad7cd  loopback  lo     
+```
+
+* **Connection Name:** `netplan-enp0s3`
+
+### 2️⃣ Step 2: Add the Persistent Route
+
+We will add a route to the **10.30.30.0/24** network via the gateway **10.0.2.101**.
+
+```bash
+hashim@Hashim:~$ sudo nmcli connection modify "netplan-enp0s3" +ipv4.routes "10.30.30.0/24 10.0.2.101"
+```
+
+### 🔍 Detailed Command Explanation
+
+* **`connection modify`**: Tells the system we are updating an existing connection.
+* **`"netplan-enp0s3"`**: The target connection name we found in Step 1.
+* **`+ipv4.routes`**: The `+` symbol is critical. It means "add this route to the existing list." Without the `+`, you might overwrite all existing routes.
+* **`"10.30.30.0/24 10.0.2.101"`**: The format is strictly `"DESTINATION GATEWAY"`.
+
+### 3️⃣ Step 3: Apply Changes
+
+We must reactivate the connection for the changes to take effect.
+
+```bash
+hashim@Hashim:~$ sudo nmcli connection up "netplan-enp0s3"
+Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/3)
+```
+
+### 📤 Verification Output
+
+Let's check the routing table again.
+
+```bash
+hashim@Hashim:~$ ip route
+default via 10.0.2.2 dev enp0s3 proto static metric 100 
+10.0.2.0/24 dev enp0s3 proto kernel scope link src 10.0.2.22 metric 100 
+10.0.2.0/24 dev enp0s3 proto kernel scope link src 10.0.2.15 metric 100 
+10.20.20.0/24 via 10.0.2.100 dev enp0s3 
+10.30.30.0/24 via 10.0.2.101 dev enp0s3 proto static metric 100 
+```
+
+**Observation:** Both routes (the temporary `10.20...` and the permanent `10.30...`) are currently visible.
+
+### 🔄 Testing Persistence
+
+If we restart the network interface (or reboot), the temporary route will vanish, but the `nmcli` route will stay.
+
+```bash
+hashim@Hashim:~$ ip route
+default via 10.0.2.2 dev enp0s3 proto static metric 100 
+10.0.2.0/24 dev enp0s3 proto kernel scope link src 10.0.2.22 metric 100 
+10.0.2.0/24 dev enp0s3 proto kernel scope link src 10.0.2.15 metric 100 
+10.30.30.0/24 via 10.0.2.101 dev enp0s3 proto static metric 100 
+```
+
+**Result:** The temporary route (`10.20.20.0`) is gone. The permanent route (`10.30.30.0`) remains.
+
+---
+
+## 📜 Adding a Route Using Legacy Approaches
+
+On older Linux systems (or when `nmcli` is not available), we use different methods.
+
+### 1️⃣ The Old Command (`route`)
+
+To add a temporary route to **10.40.40.0/24** via **10.0.2.102**:
+
+```bash
+hashim@Hashim:~$ sudo route add -net 10.40.40.0 netmask 255.255.255.0 gw 10.0.2.102
+```
+
+### 2️⃣ Making it Permanent (Legacy Files)
+
+Making routes permanent on old systems is complicated because the file location changes depending on the Linux distribution.
+
+| Distribution | File Location | Configuration Line to Add |
+| --- | --- | --- |
+| **Debian / Ubuntu (Old)** | `/etc/network/interfaces` | `up route add -net 10.40.40.0 netmask 255.255.255.0 gw 10.0.2.102` |
+| **RedHat / CentOS (Old)** | `/etc/sysconfig/network-scripts/route-enp0s3` | `10.40.40.0/24 via 10.0.2.102` |
+| **Universal (Least Elegant)** | `/etc/rc.local` | `/sbin/route add -net 10.40.40.0 netmask 255.255.255.0 gw 10.0.2.102` |
+
+> **Note on `rc.local`:** This file simply runs commands when the computer turns on. It works on almost any system, but it is considered "messy" because it is not a proper network configuration file.
+
+---
+
+## 🔌 Disabling and Enabling an Interface
+
+Sometimes, for troubleshooting or initial setup, you need to turn a network interface "off" and then "on" again. This is often called "bouncing" the interface.
+
+### 🚀 Modern Method (`ip` command)
+
+We use the `ip link set` command.
+
+```bash
+hashim@Hashim:~$ sudo ip link set enp0s3 down
+hashim@Hashim:~$ sudo ip link set enp0s3 up
+```
+
+### 🏛️ Legacy Method (`ifconfig`)
+
+On older systems, use `ifconfig`.
+
+```bash
+hashim@Hashim:~$ sudo ifconfig enp0s3 down
+hashim@Hashim:~$ sudo ifconfig enp0s3 up
+```
+
+### 🚨 Critical Warning
+
+**Do not saw off the branch you are sitting on!**
+If you are connected to the Linux machine remotely (for example, using **SSH**), disabling the network interface (`down`) will immediately disconnect you. You will lose control of the server and will not be able to send the `up` command to reconnect. Always be careful when modifying active interfaces remotely.
+
+---
