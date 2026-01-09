@@ -526,3 +526,99 @@ Now, we are ready to venture higher into the stack. Next, we will explore **Laye
 
 
 ---
+
+# 🚦 Layer 4: How TCP and UDP Ports Work
+
+## 📘 Overview
+
+When networking professionals discuss **Layer 4** (the Transport Layer), they are almost always talking about two specific protocols: **TCP** (Transmission Control Protocol) and **UDP** (User Datagram Protocol).
+
+The most critical concept at this layer is the **Port**. While IP addresses (Layer 3) get traffic to the right computer, **Ports** (Layer 4) get traffic to the right *application* (like your web browser, email client, or game) running on that computer.
+
+---
+
+## 🔗 The Connection Process
+
+When your computer (Station A) wants to talk to a server (Station B), a specific sequence of events happens:
+
+1. **Layer 2/3 Check:** First, the system identifies the target IP. It checks its **ARP Cache** to see if it has the MAC address. If not, it sends a broadcast ARP request to find it.
+2. **Layer 4 Handshake:** Once the physical path is known, the Transport Layer takes over to establish a **Port-to-Port** connection.
+
+### 🎲 Ephemeral Ports (The Source)
+
+Your computer needs a "return address" so the server knows where to send replies.
+
+* It picks a random available port number.
+* **Range:** Usually between **1024** and **65535**.
+* **Name:** This is called an **Ephemeral Port** (meaning temporary).
+
+### 🎯 Server Ports (The Destination)
+
+The server listens on a fixed, well-known port number so everyone knows where to find it (e.g., Port 80 for a Web Server).
+
+---
+
+## 🧩 The "5-Tuple" Concept
+
+How does the network keep millions of connections straight without getting them mixed up? It uses a unique identifier called a **Tuple**.
+
+Every connection is uniquely identified by these **5 values** (The 5-Tuple):
+
+1. **Source IP Address**
+2. **Destination IP Address**
+3. **Source Port** (The random ephemeral port)
+4. **Destination Port** (The fixed server port)
+5. **Protocol** (TCP or UDP)
+
+Because the Source Port is always chosen randomly, this combination is mathematically guaranteed to be unique for every single connection.
+
+> **Note:** In advanced networking (like NetFlow), this tuple can be expanded to include other data like **VLANs**, **QoS** (Quality of Service), or **ASNs** (Autonomous System Numbers).
+
+---
+
+## 🔢 Port Number Ranges
+
+Port numbers are divided into three specific ranges based on their purpose:
+
+| Range | Name | Description |
+| --- | --- | --- |
+| **0 – 1023** | **System / Well-Known Ports** | Reserved for core services (e.g., Web, Email). On Linux/Unix, you need **Root privileges** to run an app on these ports. |
+| **1024 – 49151** | **User Ports** | Used for less critical services and registered applications. |
+| **49152 – 65535** | **Dynamic / Private Ports** | Usually used for ephemeral (temporary) source ports. |
+
+> **Historical Note:** While databases and custom apps often use ports above 1024, the range 0-1023 is historically reserved for the "founding" services of the internet.
+
+---
+
+## 📋 Common Standard Ports
+
+Below is a list of commonly used services and their assigned ports:
+
+| Service | Port / Protocol | Description |
+| --- | --- | --- |
+| **DNS** | `udp/53`, `tcp/53` | Domain Name System (Resolves names to IPs) |
+| **Telnet** | `tcp/23` | Unencrypted remote terminal access |
+| **SSH** | `tcp/22` | Secure (Encrypted) Remote Shell |
+| **FTP** | `tcp/20`, `tcp/21` | File Transfer Protocol |
+| **HTTP** | `tcp/80` | Standard Unencrypted Web Traffic |
+| **HTTPS** | `tcp/443` | Secure (Encrypted) Web Traffic |
+| **SNMP** | `udp/162` | Simple Network Management Protocol |
+| **Syslog** | `tcp/443` | System Logging (Note: Standard is 514, but 443 is often used for secure tunneling) |
+
+---
+
+## 🏛️ The IANA Registry vs. Reality
+
+The **IANA** (Internet Assigned Numbers Authority) maintains the official list of port assignments (documented in **RFC6335**).
+
+* **The Rule:** You *should* use these assigned ports.
+* **The Reality:** It is more of a "Strong Suggestion."
+* It would be foolish to run a Web Server on Port 53 (confusing it with DNS).
+* However, many vendors pick random unassigned ports or "borrow" ports assigned to obscure, unused services for their own applications.
+
+
+
+As long as you don't use a famous port (like 80 or 443) for something weird, it usually works fine.
+
+---
+
