@@ -701,3 +701,341 @@ Sometimes, a connection must be killed instantly (e.g., if an error occurs or a 
 
 ---
 
+# 🔍 Local Port Enumeration: What Am I Connected To?
+
+## 📘 Overview
+
+One of the most fundamental troubleshooting steps in networking is checking the status of ports on your local machine. If a web server isn't working, the first question is: "Is the process actually running and listening on the correct port?"
+
+To answer this, we use the **`netstat`** command. It allows us to assess the state of network conversations and services on the local host.
+
+---
+
+## 💻 The Command: `netstat -tuan`
+
+The traditional method to list all listening ports and active connections is `netstat`. We use a specific set of flags to get the most useful information.
+
+### 🛠️ Command Breakdown
+
+The command `netstat -tuan` is composed of four specific options. Here is what each letter does:
+
+| Flag | Meaning | Description |
+| --- | --- | --- |
+| **-t** | **TCP** | Show only TCP ports. |
+| **-u** | **UDP** | Show only UDP ports. |
+| **-a** | **All** | Show **all** ports (both those currently connected and those just "listening" for new connections). |
+| **-n** | **Numeric** | Do **not** try to resolve DNS names. This makes the command much faster because it shows IP addresses (e.g., `8.8.8.8`) instead of trying to look up names (e.g., `google-public-dns-a.google.com`). |
+
+---
+
+## 📊 Analyzing the Output
+
+Let's look at the practical output provided in your example and break down what it means.
+
+**Example Output:**
+
+```bash
+hashim@Hashim:~$ netstat -tuan
+Active Internet connections (servers and established)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State      
+tcp        0      0 127.0.0.53:53           0.0.0.0:*               LISTEN     
+tcp        0      0 127.0.0.54:53           0.0.0.0:*               LISTEN     
+tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN     
+tcp        0      0 0.0.0.0:111             0.0.0.0:*               LISTEN     
+tcp        0      0 127.0.0.1:53            0.0.0.0:*               LISTEN     
+tcp        0      0 127.0.0.1:53            0.0.0.0:*               LISTEN     
+tcp        0      0 127.0.0.1:953           0.0.0.0:*               LISTEN     
+tcp        0      0 10.0.2.15:53            0.0.0.0:*               LISTEN     
+tcp        0      0 10.0.2.15:53            0.0.0.0:*               LISTEN     
+tcp        0      0 127.0.0.1:631           0.0.0.0:*               LISTEN     
+tcp6       0      0 :::22                   :::*                    LISTEN     
+tcp6       0      0 :::111                  :::*                    LISTEN     
+tcp6       0      0 ::1:53                  :::*                    LISTEN     
+tcp6       0      0 ::1:53                  :::*                    LISTEN     
+tcp6       0      0 ::1:631                 :::*                    LISTEN     
+tcp6       0      0 ::1:953                 :::*                    LISTEN     
+udp        0      0 0.0.0.0:5353            0.0.0.0:*                          
+udp        0      0 10.0.2.15:53            0.0.0.0:*                          
+udp        0      0 10.0.2.15:53            0.0.0.0:*                          
+udp        0      0 127.0.0.1:53            0.0.0.0:*                          
+udp        0      0 127.0.0.1:53            0.0.0.0:*                          
+udp        0      0 127.0.0.54:53           0.0.0.0:*                          
+udp        0      0 127.0.0.53:53           0.0.0.0:*                          
+udp        0      0 0.0.0.0:67              0.0.0.0:*                          
+udp        0      0 10.0.2.15:68            10.0.2.2:67             ESTABLISHED
+udp        0      0 0.0.0.0:111             0.0.0.0:*                          
+udp        0      0 10.0.2.15:123           0.0.0.0:*                          
+udp        0      0 127.0.0.1:123           0.0.0.0:*                          
+udp        0      0 0.0.0.0:123             0.0.0.0:*                          
+udp        0      0 0.0.0.0:37297           0.0.0.0:*                          
+udp6       0      0 :::5353                 :::*                               
+udp6       0      0 ::1:53                  :::*                               
+udp6       0      0 ::1:53                  :::*                               
+udp6       0      0 :::111                  :::*                               
+udp6       0      0 ::1:123                 :::*                               
+udp6       0      0 :::123                  :::*                               
+udp6       0      0 :::35105                :::* 
+```
+
+### 🔍 Column Explanation
+
+1. **Proto:** The protocol used (TCP or UDP).
+2. **Local Address:** The IP and Port on **your** computer.
+* `0.0.0.0:22` means "Listen on **all** network cards on port 22 (SSH)."
+* `127.0.0.1:53` means "Listen only internally (localhost) on port 53 (DNS)."
+
+
+3. **Foreign Address:** The IP and Port of the **remote** computer you are talking to.
+* `0.0.0.0:*` means "I am not connected to anyone specific yet; I am just waiting."
+
+
+4. **State:** The current status of the connection (Explained below).
+
+---
+
+## 🚦 Understanding TCP States
+
+TCP is a stateful protocol. It doesn't just send data; it tracks the life of the connection.
+
+### 1️⃣ Common States (Stable)
+
+These are the states you will see most often. If you see these, everything is usually normal.
+
+* **LISTEN:** There is a service (like a Web Server or SSH) running on your computer, waiting for someone to connect to it.
+* **ESTABLISHED:** The connection is active! The **3-way handshake** is complete, and both you and the server are ready to trade data.
+* *Tip:* You can tell who is the client and who is the server by the ports. If the "Local" port is a random high number and the "Foreign" port is 80 (Web), you are the client.
+
+
+* **TIME_WAIT:** The session is closed, but your computer is keeping the socket open for a few seconds just in case any lost packets arrive late. This prevents old data from mixing with a new connection.
+
+### 2️⃣ Transient States (Connection Setup)
+
+These states happen during the **3-way handshake**. They should happen so fast (milliseconds) that you rarely see them. If you see a lot of these sticking around, you might have a problem.
+
+* **SYN_SENT:** You (the client) sent a "Hello" (SYN) packet and are waiting for a reply..
+* **SYN_RECV:** You (the server) received a "Hello" (SYN) and replied with "Hello/Ack" (SYN-ACK). You are waiting for the final confirmation.
+
+**Diagram: The Connection Handshake**
+As the connection moves from `LISTEN` to `ESTABLISHED`, it follows this path:
+
+1. **Client** sends SYN -> **Server** sees `SYN_RCVD`.
+2. **Server** sends SYN/ACK -> **Client** sees `ESTABLISHED`.
+3. **Client** sends ACK -> **Server** sees `ESTABLISHED`.
+
+### 3️⃣ Transient States (Connection Teardown)
+
+Closing a connection is more complex than starting one. These states appear when "tearing down" a session.
+
+* **FIN_WAIT1 and 2:** The connection is shutting down. You are waiting for the other party to say "Goodbye" (FIN packet).
+* **CLOSE_WAIT:** The remote side said "Goodbye," and your computer is waiting for the **Application** (Layer 7) to stop working so it can close the socket.
+* *Troubleshooting:* If you see a lot of `CLOSE_WAIT`, it often means a poorly written application is hanging and not closing connections properly.
+
+
+* **LAST_ACK:** You are almost closed. You sent the final "Goodbye" and are waiting for the very last acknowledgment.
+* **CLOSING:** Both sides tried to hang up at the exact same time, but data transfers weren't quite finished.
+
+**Diagram: The Teardown**
+Notice how many steps are required to disconnect cleanly compared to connecting:
+
+* The initiator sends `FIN` (enters `FIN_WAIT_1`).
+* The receiver sends `ACK` (enters `CLOSE_WAIT`) and then sends its own `FIN` (enters `LAST_ACK`).
+* The initiator replies with `ACK` (enters `TIME_WAIT`) before finally closing.
+
+---
+
+# 🛠️ Advanced Port Enumeration: Linking Processes to Ports
+
+## 📘 Overview
+
+In the previous section, we used `netstat` to see which ports were "listening." However, knowing that *something* is listening on Port 80 isn't enough. We need to know **exactly which program** is responsible.
+
+This section covers:
+
+1. Using flags to identify Process IDs (PIDs) and Program Names.
+2. Using the modern alternative command `ss`.
+3. Advanced text processing (piping, cutting, and translating) to format output.
+4. Using `lsof` to view network connections as "files."
+
+---
+
+## 🔍 Identifying the Process: `netstat -tulpn`
+
+To relate listening ports back to the specific services running them, we add the **`-p`** flag (Program) to our `netstat` command.
+
+> **Note:** You must run this with `sudo` (root privileges). If you don't, the system hides the process names for security reasons.
+
+### 💻 Command Execution
+
+```bash
+hashim@Hashim:~$ sudo netstat -tulpn
+Active Internet connections (only servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name    
+tcp        0      0 127.0.0.53:53           0.0.0.0:* LISTEN      339/systemd-resolve 
+tcp        0      0 0.0.0.0:22              0.0.0.0:* LISTEN      1/init              
+tcp        0      0 127.0.0.1:631           0.0.0.0:* LISTEN      1410/cupsd          
+...
+udp        0      0 0.0.0.0:5353            0.0.0.0:* 699/avahi-daemon: r 
+```
+
+### 📊 Output Analysis
+
+The `-p` flag adds a crucial new column: **PID/Program name**.
+
+* **`339/systemd-resolve`**: The system DNS resolver (PID 339) is listening on port 53.
+* **`1410/cupsd`**: The printing service (CUPS, PID 1410) is listening on port 631.
+* **`699/avahi-daemon`**: The Avahi service (for network discovery) is listening on UDP port 5353.
+
+This tells you exactly what to kill or reconfigure if a port is busy.
+
+---
+
+## 🚀 The Modern Alternative: `ss`
+
+Just as `ip` replaced `ifconfig`, the **`ss`** (Socket Statistics) command is the modern replacement for `netstat`. It is faster and provides more detail.
+
+### 💻 Command: `ss -tulpn`
+
+```bash
+hashim@Hashim:~$ sudo ss -tulpn
+Netid      State       Recv-Q      Send-Q           Local Address:Port            Peer Address:Port      Process                                                                                                  
+udp        UNCONN      0           0                      0.0.0.0:5353                 0.0.0.0:* users:(("avahi-daemon",pid=699,fd=12))                                                                  
+udp        UNCONN      0           0                    10.0.2.15:53                   0.0.0.0:* users:(("named",pid=1419,fd=35))                                                                        
+tcp        LISTEN      0           4096                   0.0.0.0:22                   0.0.0.0:* users:(("sshd",pid=1480,fd=3),("systemd",pid=1,fd=267))                                                 
+...
+```
+
+### 🔍 Comparison: `ss` vs `netstat`
+
+* **Syntax:** Almost identical flags (`-tulpn`).
+* **Detail:** `ss` shows the "users" in a more structured format: `users:(("process_name",pid=123,fd=4))`.
+* **Accuracy:** `ss` queries the kernel directly, making it faster on busy systems.
+
+---
+
+## ✂️ Advanced Formatting: Piping & Cutting
+
+The output of `ss` can be wide and messy. We can use Linux command-line magic to clean it up.
+
+### The Goal
+
+We want to extract **only** specific columns (Netid, State, Local Address, Peer Address) and format them into a neat table.
+
+### The Tools
+
+1. **`tr -s ' '`**: The `tr` (translate) command with the squeeze (`-s`) option. It takes multiple spaces (which look messy) and squeezes them into a single space.
+2. **`cut -d ' ' -f 1,2,5,6`**: The `cut` command splits each line using the space as a delimiter (`-d ' '`) and keeps fields 1, 2, 5, and 6.
+3. **`--output-delimiter=$'\t'`**: This inserts a **Tab** character between the columns, making them line up perfectly.
+
+### 💻 The Magic Command
+
+```bash
+hashim@Hashim:~$ sudo ss -tuap | tr -s ' ' | cut -d ' ' -f 1,2,5,6 --output-delimiter=$'\t'
+```
+
+### 📤 Clean Output
+
+```text
+Netid	State	Local	Address:Port
+udp	UNCONN	0.0.0.0:mdns	0.0.0.0:*
+udp	ESTAB	10.0.2.15:55031	8.8.8.8:domain
+tcp	LISTEN	0.0.0.0:ssh	0.0.0.0:*
+...
+
+```
+
+Now, the output is readable and aligned!
+
+### 💾 Exporting to a File (Redirection)
+
+We can save this clean output to a file (like a spreadsheet CSV or TSV) using the **`>`** operator.
+
+```bash
+hashim@Hashim:~$ sudo ss -tuap | ... > ports.tsv
+```
+
+You can now open `ports.tsv` in Excel or LibreOffice.
+
+---
+
+## ⚡ Power User Trick: `tee` and `grep`
+
+What if you want to see the output on screen **AND** save it to a file at the same time? Use **`tee`**.
+What if you only care about **active** connections? Use **`grep`**.
+
+### 💻 Command
+
+```bash
+hashim@Hashim:~$ sudo ss -tuap | ... | grep "EST" | tee ports.out
+```
+
+### 📤 Output
+
+```text
+udp	ESTAB	10.0.2.15%enp0s3:bootpc	10.0.2.2:bootps
+
+```
+
+This filters for lines containing "EST" (Established) and saves the result to `ports.out`.
+
+---
+
+## 🕵️ Troubleshooting with `ss` Options
+
+Sometimes connections hang. Firewalls often kill idle connections silently. You can use `ss` to investigate this.
+
+### 💻 Command: `ss -to`
+
+* **`-t`**: TCP only.
+* **`-o`**: Show **Timer** options.
+
+```text
+ESTAB 0 0 192.168.122.22:42502 44.227.121.122:https timer:(keepalive,6min47sec,0)
+
+```
+
+**Why is this useful?**
+It shows the **Keepalive Timer** (`6min47sec`). If you have a backup job failing after exactly 10 minutes, and the firewall has a 10-minute timeout, this timer confirms the connection is idle and likely being killed by the firewall.
+
+---
+
+## 📂 The "Everything is a File" Concept: `lsof`
+
+In Linux, **everything is treated as a file**, including network connections. This allows us to use the **`lsof`** (List Open Files) command for networking.
+
+### 💻 Command: `lsof -i :port`
+
+This lists all "files" (connections) using a specific network port.
+
+**Example 1: Who is using Port 443 (HTTPS)?**
+
+```bash
+$ lsof -i :443
+COMMAND PID  USER  FD   TYPE DEVICE SIZE/OFF NODE NAME
+firefox 4627 robv  162u IPv4 93018  0t0      TCP  ... (ESTABLISHED)
+```
+
+* **Result:** Firefox (PID 4627) is browsing the web.
+
+**Example 2: Who is using Port 22 (SSH)?**
+
+```bash
+$ lsof -i :22
+COMMAND PID  USER  FD   TYPE DEVICE SIZE/OFF NODE NAME
+ssh     5832 robv  3u   IPv4 103832 0t0      TCP  ... (ESTABLISHED)
+```
+
+* **Result:** The SSH client (PID 5832) is connected.
+
+---
+
+## ❓ Why Does This Matter?
+
+Why are we obsessed with knowing exactly which process is on which port?
+**Answer: The "Single Tenant" Rule.**
+
+**Only one service can listen on a specific port at a time.**
+
+* If Apache Web Server is running on Port 80, and you try to start Nginx on Port 80, Nginx will crash immediately.
+* Using `netstat`, `ss`, or `lsof` lets you instantly identify the conflict ("Oh, Apache is already running!") so you can stop the old service and start the new one.
+
+---
