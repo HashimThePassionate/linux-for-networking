@@ -703,7 +703,7 @@ Sometimes, a connection must be killed instantly (e.g., if an error occurs or a 
 
 # 🔍 Local Port Enumeration: What Am I Connected To?
 
-## 📘 Overview
+## 📘 Overview 
 
 One of the most fundamental troubleshooting steps in networking is checking the status of ports on your local machine. If a web server isn't working, the first question is: "Is the process actually running and listening on the correct port?"
 
