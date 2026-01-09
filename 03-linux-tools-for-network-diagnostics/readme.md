@@ -427,3 +427,102 @@ When the system comes back online, the MAC address will have been changed automa
 * **Udev:** Slightly more complex, but useful if Netplan is failing, or if you require the MAC address to be changed at the absolute earliest moment during the system boot sequence.
 
 ---
+
+# 🏷️ MAC Address OUI Values
+
+## 📘 Overview
+
+We have already covered **timeouts** and **ARP** (Address Resolution Protocol), but our journey through **Layer 2** is not finished yet. We must understand the **Organizationally Unique Identifier (OUI)**.
+
+Just like an **IP address** is split into two parts (Network and Host) using a subnet mask, a **MAC address** has a very similar dividing line! A MAC address is not just a random string of numbers; it follows a strict structure that tells us who made the device.
+
+---
+
+## 🧩 The Structure of a MAC Address
+
+A standard MAC address is **48 bits** long (6 bytes). It is usually split right in the middle.
+
+### 1. The Manufacturer (OUI)
+
+* **Location:** The **Leading Bits** (usually the first 3 bytes / 6 characters).
+* **Name:** **OUI** (Organizationally Unique Identifier).
+* **Purpose:** Identifying the company that manufactured the network card (e.g., Dell, Apple, Cisco).
+
+### 2. The Device ID (NIC Specific)
+
+* **Location:** The **Last 3 bytes**.
+* **Purpose:** Uniquely identifying the specific device made by that manufacturer.
+
+### 📉 Visual Breakdown
+
+If we look at a MAC address like `00:0C:29:3B:73:CB`:
+
+| Part | Value | Description |
+| --- | --- | --- |
+| **OUI (First Half)** | `00:0C:29` | **VMware, Inc.** (This tells us the device is a Virtual Machine). |
+| **Device ID (Second Half)** | `3B:73:CB` | **Unique Serial Number** assigned to this specific card. |
+
+> **Note:** While the standard split is 50/50 (24 bits for OUI, 24 bits for Device), organizations can sometimes purchase **longer OUIs** for a lower fee. This gives them a longer prefix but fewer available unique addresses to assign to devices.
+
+---
+
+## 📚 The Registries: Who Tracks This?
+
+OUIs are not random; they must be registered. There are two main sources for this data:
+
+### 1. The Official IEEE Registry
+
+The **IEEE** (Institute of Electrical and Electronics Engineers) maintains the formal list of all assigned manufacturers.
+
+* **Source:** [http://standards-oui.ieee.org/oui.txt](http://standards-oui.ieee.org/oui.txt)
+
+### 2. The Wireshark Registry
+
+The **Wireshark** project (a famous network analysis tool) maintains a more complete and practical listing.
+
+* **Source:** [https://gitlab.com/wireshark/wireshark/-/raw/master/manuf](https://gitlab.com/wireshark/wireshark/-/raw/master/manuf)
+
+---
+
+## 🔍 Practical Use: Network Troubleshooting
+
+Why should a network administrator care about OUIs? They are incredibly valuable for **troubleshooting**.
+
+* **Identifying "Culprits":** If an unknown device is causing problems on your network (like flooding traffic), looking at the OUI tells you what *kind* of device it is.
+* *Example:* If the MAC starts with `B8:27:EB`, you know it is a **Raspberry Pi**. If it starts with `00:11:22`, it might be a specific router brand.
+
+
+* **Security Scanning:** Tools like **Nmap** (Network Mapper) use OUI values to guess the operating system and hardware of devices they scan. We will explore this further in later chapters.
+
+---
+
+## 🛠️ Tools for OUI Lookup
+
+You do not need to memorize these codes. There are tools available to help you look them up instantly.
+
+### 🌐 Web-Based Lookup
+
+Wireshark provides an easy-to-use web application where you can paste a MAC address to find the manufacturer.
+
+* **Tool:** [https://www.wireshark.org/tools/oui-lookup.html](https://www.wireshark.org/tools/oui-lookup.html)
+
+### 💻 Command-Line Parser
+
+If you prefer working in the terminal (Linux or Windows) and want to parse OUIs via scripts, there is a dedicated tool available on GitHub.
+
+* **Repository:** [https://github.com/robvandenbrink/ouilookup](https://github.com/robvandenbrink/ouilookup)
+
+---
+
+## 🚀 Next Steps: Moving Up the Stack
+
+This concludes our deep dive into **Layer 2 (Data Link Layer)** of the OSI model. We have covered:
+
+* MAC Addresses and hardware identity.
+* ARP (Address Resolution Protocol).
+* The relationship between Layer 2 and Layer 3.
+
+Now, we are ready to venture higher into the stack. Next, we will explore **Layer 4 (Transport Layer)**, specifically focusing on the **TCP** and **UDP** protocols and the services they provide.
+
+
+---
