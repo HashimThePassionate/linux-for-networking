@@ -1284,3 +1284,200 @@ However, for scanning thousands of hosts professionally, we need something faste
 
 
 ---
+
+# 📜 Nmap Scripting Engine (NSE) & Advanced Scanning
+
+## 📘 Overview
+
+We have mastered basic port scanning. Now, we unlock the full power of **Nmap** using its **Scripting Engine (NSE)**.
+
+Nmap is not just a scanner; it is a platform. It uses a built-in scripting engine based on **Lua** (a simple programming language). This allows Nmap to:
+
+* Detect advanced service information (like software versions).
+* Check for specific vulnerabilities (like "WannaCry").
+* Automate complex networking tasks.
+
+Nmap comes with **hundreds** of pre-written scripts that are invaluable for network administrators.
+
+---
+
+## 🛡️ Case Study: Scanning for SMB Vulnerabilities
+
+A classic use case for Nmap scripts is checking the **SMB (Server Message Block)** protocol. This is the protocol Windows uses to share files.
+
+### ❓ The Problem: SMBv1 & EternalBlue
+
+Microsoft has urged the world to stop using **SMBv1** (an old version of the protocol).
+
+* **Why?** It is insecure. In 2017, the **EternalBlue** exploit used SMBv1 to launch the massive **WannaCry** ransomware attack.
+* **The Goal:** We need to scan our network to see if any computers are still using this dangerous protocol.
+
+### 🧪 Practical Example 1: Checking SMB Protocols
+
+We use the script `smb-protocols` to ask the server, "Which versions of SMB do you speak?"
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo nmap -p 139,445 --script smb-protocols 10.0.2.0/24
+```
+
+**Output Analysis:**
+
+```text
+Nmap scan report for _gateway (10.0.2.2)
+Host is up (0.0010s latency).
+
+PORT    STATE    SERVICE
+139/tcp filtered netbios-ssn
+445/tcp open     microsoft-ds
+
+Host script results:
+| smb-protocols: 
+|   dialects: 
+|     2:0:2
+|     2:1:0
+|     3:0:0
+|     3:0:2
+|_    3:1:1
+
+```
+
+**🔍 Explanation:**
+
+1. **The Target:** We scanned the `_gateway` (10.0.2.2).
+2. **The Port:** TCP Port 445 is **open** (This is the standard SMB port).
+3. **The Result:** The script lists the supported dialects:
+* `2:0:2` (SMBv2)
+* `3:1:1` (SMBv3)
+* **Crucial Observation:** It does **NOT** list `NT LM 0.12` (which is SMBv1).
+* **Conclusion:** This host is **Safe** from SMBv1 risks.
+
+
+
+---
+
+### 🧪 Practical Example 2: Checking for Specific Vulnerabilities
+
+We can be more aggressive. Instead of just asking for versions, we can ask, "Are you vulnerable to the MS17-010 (EternalBlue) exploit?"
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo nmap -p 445 --script smb-vuln-ms17-010 10.0.2.0/24
+```
+
+**Output Analysis:**
+
+```text
+Nmap scan report for _gateway (10.0.2.2)
+Host is up (0.00073s latency).
+
+PORT    STATE SERVICE
+445/tcp open  microsoft-ds
+
+```
+
+**🔍 Explanation:**
+
+* The scan ran against the gateway.
+* **No Script Output:** Notice that there is no "Host script results" section.
+* **Meaning:** Nmap typically only prints script output if it finds something positive (i.e., if it found the vulnerability).
+* **Conclusion:** The gateway is **not vulnerable** to EternalBlue.
+
+
+# 🧰 Essential Nmap Scripts for Administrators
+
+Here are the most useful scripts for finding **"Rogue"** or **"Shadow" IT** on your network.
+
+---
+
+## 🏴‍☠️ 1. Finding "Shadow IT" (Unexpected Servers)
+
+These scripts help you find database servers or developer tools that shouldn't be running on a regular network.
+
+| What to look for? | Description & Risk | Scripts to Use |
+| :--- | :--- | :--- |
+| **Unlicensed / Hidden Databases** | Finds database servers (SQL, Oracle, MongoDB) installed without permission. Often insecure. | `broadcast-ms-sql-discover`<br>`broadcast-sybase-asa-discover`<br>`oracle-tns-version`<br>`broadcast-db2-discover`<br>`couchdb-databases`<br>`mongodb-info` |
+| **Personal Jenkins Servers** | Jenkins is a powerful automation tool. Finding one running on a random laptop is a major security risk. | `broadcast-jenkins-discover` |
+
+---
+
+## 🕸️ 2. Unexpected or Malicious Infrastructure
+
+Detects networking gear that might be intercepting your traffic.
+
+| What to look for? | Description & Risk | Scripts to Use |
+| :--- | :--- | :--- |
+| **Rogue Routers** | Malicious routers can use protocols like RIP or OSPF to redirect traffic (**Man-in-the-Middle**). | `broadcast-eigrp-discovery`<br>`broadcast-igmp-discovery`<br>`broadcast-ospf2-discover`<br>`broadcast-rip-discover`<br>`broadcast-ripng-discover` |
+| **Rogue Proxies** | Finds **WPAD** (Web Proxy Auto-Discovery) issues. Hackers use this to steal credentials. | `broadcast-wpad-discover` |
+| **Open SNMP** | Finds devices leaking system info via **SNMP**. | `snmp-info` |
+
+---
+
+## 💻 3. Workstation Issues
+
+Scripts to identify weak configurations on regular employee laptops.
+
+| What to look for? | Description & Risk | Scripts to Use |
+| :--- | :--- | :--- |
+| **UPnP (Universal Plug and Play)** | Devices that automatically open holes in the firewall, creating security risks. | `broadcast-upnp-info` |
+| **LLMNR Protocol** | Used by Windows when DNS fails. Easily exploited by hackers to steal credentials. | `llmnr-resolve` |
+
+---
+
+## 🏰 4. Network Perimeter & Server Problems
+
+Scripts to check your "Front Door" (Internet-facing security).
+
+| What to look for? | Description & Risk | Scripts to Use |
+| :--- | :--- | :--- |
+| **VPN Audit** | Finds VPNs using old, insecure encryption (**IKEv1**) or unauthorized VPN hosts. | `ike-version`<br>`http-cisco-anyconnect` |
+| **Rogue DNS Servers** | Finds DNS servers running on your network that you didn't know existed. | `broadcast-dns-service-discovery`<br>`dns-srv-enum` |
+| **DNS Recursion** | Checks if your DNS server answers queries for *anyone*. Allows **DDoS attacks**. | `dns-recursion` |
+| **Rogue DHCP** | Finds unauthorized routers (like home Wi-Fi routers) handing out bad IP addresses. | `dhcp-discover`<br>`broadcast-dhcp-discover` |
+
+---
+
+## 📏 5. Network Path Troubleshooting (MTU)
+
+| What to look for? | Description & Risk | Script to Use |
+| :--- | :--- | :--- |
+| **Path MTU** | Calculates largest packet size allowed. Essential for troubleshooting **VPNs** or **WAN links**. | `path-mtu` |
+
+---
+
+## 🛠️ 6. Certificates & Encryption Audits
+
+Scripts to ensure your encryption isn't expired or obsolete.
+
+| What to look for? | Description & Risk | Scripts to Use |
+| :--- | :--- | :--- |
+| **Certificate Expiry** | Checks if SSL/TLS certificates are about to expire (or already have). | `ssl-cert`<br>`ssl-date` |
+| **Weak Encryption (SSL/TLS)** | Finds servers supporting old protocols like **SSLv1** or **TLSv1.0**. | `ssl-dh-params`<br>`ssl-enum-ciphers` |
+| **Weak RDP/SSH** | Checks remote access servers for weak encryption settings. | `rdp-enum-encryption`<br>`ssh2-enum-algos`<br>`sshv1` |
+| **Bitcoin Mining** | Detects unauthorized crypto mining software. | `bitcoin-info` |
+
+
+
+## ⏳ The Limits of Nmap
+
+Nmap is amazing, but it has one major limitation: **Performance**.
+
+### 1. The Scaling Problem
+
+* **Time:** Scanning a small subnet takes seconds. Scanning a large corporate network (or the internet) can take days or weeks.
+* **Accuracy:** If a scan takes 24 hours, employees will turn off their laptops before you finish. You miss data.
+* **IPv6:** The IPv6 address space is so huge (millions of addresses) that scanning it traditionally is impossible. It would take decades.
+
+### 2. Solutions for Speed
+
+* **Optimization:** You can tune Nmap's timing (`-T4`), parallelism, and timeouts to make it faster. (See `man nmap` or the performance book).
+* **Alternative Tools:** For massive scans, professional researchers use **MASSCAN**.
+* **MASSCAN** is built for pure speed. It can scan the **entire Internet** (IPv4) in under 10 minutes.
+
+
+* **Strategy:** "Chain" your tools. Use MASSCAN to quickly find *which* hosts are alive, then feed that list into Nmap for detailed scanning.
+
+---
+
