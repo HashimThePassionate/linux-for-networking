@@ -622,3 +622,82 @@ As long as you don't use a famous port (like 80 or 443) for something weird, it 
 
 ---
 
+# 🤝 Layer 4: TCP and the Three-Way Handshake
+
+## 📘 Overview: UDP vs. TCP
+
+At Layer 4, two main protocols dominate the internet: **UDP** (User Datagram Protocol) and **TCP** (Transmission Control Protocol). They handle data very differently.
+
+### 🚀 UDP: The "Fire and Forget" Protocol
+
+UDP is simple. Once it determines the **5-tuple** (Source IP, Dest IP, Source Port, Dest Port, Protocol), it just starts sending data.
+
+* **No Overhead:** It does not check if data arrived safely.
+* **Use Case:** Ideal for **Time-Critical Applications** like **VoIP (Voice over IP)** and **Video Streaming**.
+* **Why?** If a packet of audio is lost during a phone call, it is better to just skip it. Stopping to "retry" (backtracking) would cause a noticeable lag or freeze for the user.
+
+### 🛡️ TCP: The Reliable Protocol
+
+TCP is different. It values reliability over raw speed.
+
+* **Sequence Numbers:** It assigns a number to every packet.
+* **Error Checking:** It tracks dropped or corrupted packets and resends them automatically.
+* **The Cost:** This requires a setup phase before any data can be sent. This setup is called the **Three-Way Handshake**.
+
+---
+
+## 🤝 The TCP Three-Way Handshake
+
+Before a TCP conversation starts, the Client and Server must agree on "Sequence Numbers" to track the data. This negotiation happens in three specific steps.
+
+### 1️⃣ Step 1: The Client Says "Hello" (SYN)
+
+The client (your computer) initiates the connection using an **Ephemeral Port** to the server's **Fixed Port**.
+
+* **Flag:** **SYN** (Synchronize).
+* **Sequence Number:** The client generates a random number (e.g., `5432`).
+* **Meaning:** "I want to sync with you. My tracking number starts at 5432."
+
+### 2️⃣ Step 2: The Server Replies (SYN-ACK)
+
+The server receives the request and replies. This is technically two steps combined into one packet.
+
+* **Flag 1:** **ACK** (Acknowledge). It confirms the client's number by adding 1 (`5433`).
+* **Flag 2:** **SYN** (Synchronize). The server sends its *own* random tracking number (e.g., `6543`).
+* **Meaning:** "I hear you (ACK 5433). I am ready to sync, and my tracking number starts at 6543."
+
+### 3️⃣ Step 3: The Client Confirms (ACK)
+
+The client acknowledges the server's tracking number.
+
+* **Flag:** **ACK**. It confirms the server's number by adding 1 (`6544`).
+* **Meaning:** "I hear you (ACK 6544). Connection established."
+
+### 4️⃣ Step 4: Data Transfer
+
+Once this is done, the connection is **Established**. Both sides now trust each other and track every byte sent. All future packets will be ACK packets that increment these numbers.
+
+---
+
+## 🛑 Ending the Connection
+
+Just as there is a formal way to start a chat, there is a formal way to end it.
+
+### 🍂 Graceful Termination (The Polite Goodbye)
+
+When the conversation is done, the parties shut it down cleanly.
+
+1. **Sender:** Sends a **FIN** (Finish) packet.
+2. **Receiver:** Replies with a **FIN-ACK**.
+3. **Sender:** Sends a final **ACK**.
+4. **Result:** The connection is closed, and resources are released.
+
+### 💥 Ungraceful Termination (The "Hang Up")
+
+Sometimes, a connection must be killed instantly (e.g., if an error occurs or a firewall blocks it).
+
+* **Packet Type:** **RST** (Reset).
+* **Result:** The conversation ends immediately. The other party should not reply.
+
+---
+
