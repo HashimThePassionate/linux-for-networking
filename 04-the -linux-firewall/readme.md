@@ -507,3 +507,198 @@ COMMIT
 The firewall is now completely reset.
 
 ---
+
+# 🌐 The NAT Table (Network Address Translation)
+
+## 📘 Overview
+
+**Network Address Translation (NAT)** is a technique used to modify the source or destination IP addresses of network packets as they pass through a router or firewall.
+
+In simple terms: NAT translates traffic coming from (or going to) one IP address/subnet and makes it appear as if it is coming from another.
+
+### 🏢 Common Use Case: Internet Gateways
+
+This is most commonly seen in internet gateways or firewalls.
+
+* **Inside Interface:** Connects to your local network using private addresses (RFC1918 ranges like `10.x.x.x` or `192.168.x.x`).
+* **Outside Interface:** Connects to the public internet using a single routable IP address.
+
+### 🔄 How Mapping Works (The Tuple)
+
+When multiple internal devices access the internet, they are often "mapped" to the single public IP of the gateway. This is called **Overload NAT** (or PAT - Port Address Translation).
+
+The gateway modifies the packet's **Tuple**:
+
+* **Original Tuple:** `Source IP (Private), Source Port, Dest IP, Dest Port, Protocol`
+* **New Tuple:** `Source IP (Public Gateway), Source Port (Next Available), Dest IP, Dest Port, Protocol`
+
+The firewall keeps this translation record in a **NAT Table** in memory.
+
+* **Return Traffic:** When the internet replies, the firewall looks up the table, reverses the translation, and sends the data back to the correct internal device.
+* **Cleanup:**
+* **TCP:** Entries are removed when the session ends (teardown).
+* **UDP:** Entries expire after a period of inactivity.
+
+
+
+---
+
+## 🛠️ Configuring NAT: The `nat` Table
+
+In `iptables`, NAT rules are stored in a specific table called `nat`. Let's explore how to configure this on a Linux gateway.
+
+### 1️⃣ Step 1: Viewing the Default NAT Table
+
+By default, the table is empty. We use the `-t nat` flag to specify we want to look at the NAT table (not the default filter table).
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo iptables -t nat -L -v
+Chain PREROUTING (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination
+
+Chain INPUT (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination
+
+Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination
+
+Chain POSTROUTING (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination
+
+```
+
+**Analysis:**
+
+* **PREROUTING:** Handles packets *before* they are routed (DNAT).
+* **POSTROUTING:** Handles packets *after* they are routed (SNAT/Masquerade).
+* Currently, all chains are empty.
+
+### 2️⃣ Step 2: Adding the Masquerade Rule
+
+We want to allow our internal network to access the internet. To do this, we tell the firewall to **Masquerade** (hide) all internal traffic behind the IP address of the external interface (`enp0s3`).
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo iptables -t nat -A POSTROUTING -o enp0s3 -j MASQUERADE
+
+```
+
+**Command Explanation:**
+
+* **`-t nat`**: Use the NAT table.
+* **`-A POSTROUTING`**: Append this rule to the **POSTROUTING** chain. We do this *after* the routing decision is made because we want to modify the packet right before it leaves the box.
+* **`-o enp0s3`**: Applies only to traffic leaving **Out** of the interface `enp0s3`.
+* **`-j MASQUERADE`**: The action. Automatically use the current IP address of the interface for translation.
+
+### 3️⃣ Step 3: Verifying the Rule
+
+Let's check the table again to confirm the rule exists.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo iptables -t nat -L -n -v
+Chain PREROUTING (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination
+
+Chain INPUT (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination
+
+Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination
+
+Chain POSTROUTING (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination
+    0     0 MASQUERADE  all  --  * enp0s3  0.0.0.0/0            0.0.0.0/0
+
+```
+
+**Observation:** You can see the `MASQUERADE` target listed under `POSTROUTING`.
+
+---
+
+## 🧪 Testing the Configuration
+
+To prove this works, we will verify our IP addresses and generate traffic.
+
+### 1. Check Internal vs. External IP
+
+First, we look at our local (private) IP, then we ask the internet what IP it sees.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ ip -4 a show enp0s3 | grep inet
+    inet 10.0.2.15/24 brd 10.0.2.255 scope global dynamic noprefixroute enp0s3
+
+```
+
+* **Internal IP:** `10.0.2.15`
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ curl ifconfig.me
+154.81.228.31
+
+```
+
+* **External IP:** `154.81.228.31`
+* **Result:** Success! The internet sees us as the public IP, not our private `10.0.2.15` address.
+
+### 2. Generate Traffic (Ping)
+
+Now, we send some traffic through the firewall to trigger the counters.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ ping -c 4 google.com
+PING google.com (142.250.184.110) 56(84) bytes of data.
+64 bytes from lcmcta-am-in-f14.1e100.net (142.250.184.110): icmp_seq=1 ttl=255 time=87.1 ms
+64 bytes from lcmcta-am-in-f14.1e100.net (142.250.184.110): icmp_seq=2 ttl=255 time=75.9 ms
+64 bytes from lcmcta-am-in-f14.1e100.net (142.250.184.110): icmp_seq=3 ttl=255 time=75.6 ms
+64 bytes from lcmcta-am-in-f14.1e100.net (142.250.184.110): icmp_seq=4 ttl=255 time=84.3 ms
+
+--- google.com ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3009ms
+rtt min/avg/max/mdev = 75.555/80.745/87.137/5.094 ms
+
+```
+
+### 3. Verify Packet Processing
+
+Finally, we check the NAT table again to see if the counters increased. This proves the rule actually touched the packets.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo iptables -t nat -L POSTROUTING -v -n
+Chain POSTROUTING (policy ACCEPT 3 packets, 220 bytes)
+ pkts bytes target     prot opt in     out     source               destination
+   22  1633 MASQUERADE  all  --  * enp0s3  0.0.0.0/0            0.0.0.0/0
+
+```
+
+**Observation:**
+
+* **pkts:** `22`
+* **bytes:** `1633`
+* The counters are non-zero, confirming the NAT is active and working.
+
+---
+
+## 🔒 A Note on Routing Order & Encryption
+
+The distinction between `PREROUTING` and `POSTROUTING` becomes critical when you introduce encryption (like VPNs).
+
+* **Pre-Routing:** Happens before the routing decision.
+* **Post-Routing:** Happens after the routing decision.
+
+If you encrypt traffic *before* a NAT operation, the NAT sees encrypted garbage and cannot translate specific ports. If you encrypt *after*, the NAT works as expected. Defining the order ensures there is no confusion in complex setups.
+
+
+---
