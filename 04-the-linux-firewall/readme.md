@@ -840,3 +840,239 @@ The `mangle` table is also used for **QoS (Quality of Service)**. You can set **
 * **FRR / Zebra:** Routing packages for Linux.
 
 ---
+
+# 🛡️ Configuring nftables: The Modern Linux Firewall
+
+## 📘 Overview
+
+As discussed, `iptables` is being deprecated in Linux and replaced by **nftables**. While `iptables` served us well for decades, `nftables` offers significant architectural improvements required for modern infrastructure.
+
+### 🚀 Why Switch to nftables?
+
+There are four major reasons to adopt the new standard:
+
+1. **Speed:** Deploying rules is significantly faster. Unlike `iptables`, which modifies the kernel sequentially for each rule added, `nftables` updates rules atomically.
+2. **API & Automation:** `nftables` includes a native API. This supports "Network as Code" tools like **Terraform**, **Ansible**, **Puppet**, or **Chef**, allowing administrators to automate deployments in minutes instead of hours.
+3. **Efficiency:** It runs more efficiently within the Linux kernel, consuming less CPU. This is critical when scaling to hundreds of virtual machines or thousands of rules.
+4. **Single Command:** A single command tool (`nft`) handles **both** IPv4 and IPv6 protocols. You no longer need separate commands like `iptables` and `ip6tables`.
+
+---
+
+## 🧱 Basic Configuration
+
+Before starting, it is recommended to read the manual using `man nft`.
+
+We will deploy the same **Input Firewall** configuration used in the previous section. This setup restricts access to the host, a common pattern in data centers.
+
+### ⚠️ Important Pre-check
+
+* **Document Existing Rules:** Always back up your current configuration.
+* **Clear Old Rules:** Running `iptables` and `nftables` simultaneously is risky and confusing for future administrators. Ensure you clear the old system before starting the new one.
+
+### 🔄 The Translation Tool: `iptables-translate`
+
+If you already know `iptables` syntax, you don't need to relearn everything from scratch. Linux provides a tool to translate old commands into the new format.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo iptables-translate -A INPUT -i enp0s3 -p tcp -s 10.0.2.0/24 --dport 22 -j ACCEPT -m comment --comment "Permit Admin"
+```
+
+**Output:**
+
+```bash
+nft 'add rule ip filter INPUT iifname "enp0s3" ip saddr 10.0.2.0/24 tcp dport 22 counter accept comment "Permit Admin"'
+```
+
+**Explanation:**
+The tool generated the exact `nft` string required to replicate the old rule. We can use this syntax to build our new ruleset.
+
+---
+
+### 🛠️ Building the Ruleset Step-by-Step
+
+In `nftables`, tables and chains are **not** created by default. We must define the structure manually.
+
+#### 1. Create the Table
+
+We create a table named `filter` for the `ip` (IPv4) family.
+
+```bash
+hashim@Hashim:~$ sudo nft add table ip filter
+```
+
+#### 2. Create the Chain
+
+We create a chain named `INPUT` inside the `filter` table. We must define its type, hook, and priority.
+
+```bash
+hashim@Hashim:~$ sudo nft add chain ip filter INPUT { type filter hook input priority 0 \; }
+```
+
+* **hook input:** This chain attaches to incoming traffic.
+* **priority 0:** Determines order (similar to rule numbers).
+
+#### 3. Add the Rules
+
+Now we add the specific Allow/Block rules.
+
+* **Rule 1: Permit Admin SSH** (Allow `10.0.2.0/24` on Port 22)
+```bash
+hashim@Hashim:~$ sudo nft add rule ip filter INPUT iifname "enp0s3" ip saddr 10.0.2.0/24 tcp dport 22 counter accept comment \"Permit Admin\"
+```
+
+
+* **Rule 2: Block Other SSH** (Block Port 22 for everyone else)
+```bash
+hashim@Hashim:~$ sudo nft add rule ip filter INPUT iifname "enp0s3" tcp dport 22 counter drop comment \"Block Admin\"
+```
+
+
+* **Rule 3: Block Specific Web Host** (Block `10.0.2.5` from Port 443)
+```bash
+hashim@Hashim:~$ sudo nft add rule ip filter INPUT iifname "enp0s3" ip saddr 10.0.2.5 tcp dport 443 counter drop comment \"Block inbound Web\"
+```
+
+
+* **Rule 4: Permit All Other Web** (Allow Port 443 for everyone else)
+```bash
+hashim@Hashim:~$ sudo nft add rule ip filter INPUT tcp dport 443 counter accept comment \"Permit all Web Access\"
+```
+
+
+
+---
+
+## 📋 Verifying the Configuration
+
+To view the structure we just created, we use the `list ruleset` command.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo nft list ruleset
+```
+
+**Output:**
+
+```text
+table ip filter {
+	chain INPUT {
+		type filter hook input priority filter; policy accept;
+		iifname "enp0s3" ip saddr 10.0.2.0/24 tcp dport 22 counter packets 0 bytes 0 accept comment "Permit Admin"
+		iifname "enp0s3" tcp dport 22 counter packets 0 bytes 0 drop comment "Block Admin"
+		iifname "enp0s3" ip saddr 10.0.2.5 tcp dport 443 counter packets 0 bytes 0 drop comment "Block inbound Web"
+		tcp dport 443 counter packets 0 bytes 0 accept comment "Permit all Web Access"
+	}
+
+	chain FORWARD {
+		type filter hook forward priority filter; policy accept;
+	}
+
+	chain OUTPUT {
+		type filter hook output priority filter; policy accept;
+	}
+}
+```
+
+**Observation:**
+
+* The output is structured cleanly (similar to JSON or C code).
+* Counters (`packets 0 bytes 0`) are automatically included because we added the `counter` keyword.
+
+> **Note on Persistence:** Like `iptables`, these rules are stored in memory and will vanish on reboot. To make them permanent, save them to the default configuration file, usually located at `/etc/nftables.conf`.
+
+---
+
+## 📂 Advanced: Using Include Files & Maps
+
+Complex server configurations can make the main configuration file messy. `nftables` allows us to organize rules into logical files and "Maps".
+
+### 1. The Include Structure
+
+Instead of one giant file, we can split rules into specific files based on their function.
+
+**File 1: `/etc/nftables/webserver-rules.nft**`
+
+```bash
+# Rules specifically for Web Access
+add rule ip filter INPUT iifname "enp0s3" ip saddr 10.0.2.5 tcp dport 443 counter drop comment "Block inbound Web"
+add rule ip filter INPUT tcp dport 443 counter accept comment "Permit all Web Access"
+```
+
+**File 2: `/etc/nftables/admin-rules.nft**`
+
+```bash
+# Rules specifically for Admin SSH Access
+add rule ip filter INPUT iifname "enp0s3" ip saddr 10.0.2.0/24 tcp dport 22 counter accept comment "Permit Admin"
+add rule ip filter INPUT iifname "enp0s3" tcp dport 22 counter drop comment "Block Admin"
+```
+
+**Master File: `/etc/nftables.conf**`
+We reference the smaller files using the `include` command.
+
+```bash
+#!/usr/sbin/nft -f
+
+flush ruleset
+
+table ip filter {
+    chain INPUT {
+        type filter hook input priority 0; policy accept;
+        
+        # Admin access restricted to admin VLAN only
+        include "/etc/nftables/admin-rules.nft"
+
+        # Webserver ruleset
+        include "/etc/nftables/webserver-rules.nft"
+    }
+}
+```
+
+### 2. Using Maps (`vmap`) for Segmentation
+
+Maps allow you to create efficient "Jump" logic. Instead of reading every rule linearly, the firewall can check the IP address and immediately "jump" to a specific chain meant for that network segment.
+
+**Command Example:**
+
+```bash
+nft add rule ip Firewall Forward ip daddr vmap { \
+ 10.0.2.1-10.0.2.50 : jump chain-servers, \
+ 10.0.2.51-10.0.2.100 : jump chain-desktops \
+}
+```
+
+**Explanation:**
+
+* Traffic for IPs `.1` to `.50` immediately goes to the `chain-servers` rule list.
+* Traffic for IPs `.51` to `.100` immediately goes to the `chain-desktops` rule list.
+* This significantly reduces CPU usage on large networks.
+
+---
+
+## 🧹 Removing the Configuration (Clean Up)
+
+Before finishing, we must clean up our test environment. We will flush both the old `iptables` rules (just in case) and our new `nftables` ruleset.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ # Clear iptables first
+sudo iptables -F INPUT
+sudo iptables -F FORWARD
+
+# Clear nftables next
+sudo nft flush ruleset
+
+```
+
+**Verification:**
+
+```bash
+hashim@Hashim:~$ sudo nft list ruleset
+```
+
+*(The output will be empty, confirming the ruleset is successfully flushed).*
+
+---
