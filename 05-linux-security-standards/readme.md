@@ -266,3 +266,69 @@ This means you rely entirely on the Cloud Provider to handle the OS security, up
 
 
 ---
+
+# 🛡️ Commonly Encountered Industry-Specific Security Standards
+
+## 📘 Overview
+
+There is a wide variety of guidance and regulatory requirements designed for specific industries. Even if you do not work in these specific fields, you may still recognize many of them. Because they are tailored to specific sectors, we will describe them at a high level. However, keep in mind that each of these standards is complex enough to fill entire books on its own.
+
+---
+
+## 🌍 Privacy Legislation
+
+This section outlines the key regulations that govern how personal data is protected in different regions of the world.
+
+### 🇪🇺 GDPR (General Data Protection Regulation)
+
+* **Region:** European Union
+* **Unique Feature:** This legislation includes **"the right to be forgotten."** This means vendors who must follow GDPR are required to provide a method to securely delete a person's private information upon request.
+* **Complexity:** This regulation is notable for being both complete and very complex. It was passed in 2016, but even as of 2021, the specific details and implications are not fully interpreted for every situation.
+
+### 🇨🇦 PIPEDA (Personal Information Protection and Electronic Documents Act)
+
+* **Region:** Canada
+* **Function:** Like many other jurisdictions, this legislation governs how personal information is used, stored, protected, deleted, and sometimes sold.
+* **Note on the US:** While many regions have privacy laws (like the two listed here), the **United States** is notable because it currently does not have any single federal (national) privacy regulation.
+
+---
+
+## 🔐 Security Standards
+
+This section details the various standards created by industries and governments to ensure information security.
+
+### 💳 PCI-DSS (Payment Card Industry Data Security Standard)
+
+* **Target Audience:** This applies to you if you handle credit cards or work in the financial sector.
+* **Focus:** Its primary goal is the security of cardholder data.
+* **Reputation:** It is often referred to as a "lowest common denominator" standard, meaning it sets the basic baseline for security.
+
+### 🏥 HIPAA (Health Information Portability and Accountability Act)
+
+* **Target Audience:** This standard applies strictly to the healthcare sector.
+* **Focus:** It focuses on protecting **PII** (Personally Identifiable Information) and data specific to healthcare operations.
+
+### 🏛️ NIST-800 Series (National Institute for Standards and Technology)
+
+* **Origin:** NIST is a US Government agency that publishes standards for government departments.
+* **The 800 Series:** This specific series of documents defines information security and physical security requirements.
+* **Adoption:** These standards are so comprehensive that many **private sector** organizations choose to use them voluntarily. Additionally, private companies doing federal contract work may be legally mandated to comply with them.
+
+### ☁️ FedRAMP (Federal Risk and Authorization Management Program)
+
+* **Focus:** This set of standards specifically governs the security of **cloud-based** products and services intended for use by US Government agencies.
+
+### 🛡️ DISA STIGs (Defense Information Systems Agency Security Technical Implementation Guides)
+
+* **Target Audience:** These are created exclusively for products and systems used in the **military**, covering several Linux distributions.
+* **Key Difference:** While other standards focus on the *end goal* (being secure), DISA STIGs are different. They are **prescriptive guides** that tell you exactly which specific settings and configurations to use.
+
+---
+
+## 🤝 The Common Ground: CIS Controls
+
+While every standard listed above has a specific industry focus, the underlying security recommendations are often very similar.
+
+When there is no specific regulation providing good security guidance, organizations often turn to the **Center for Internet Security (CIS)** "critical controls." These controls are frequently used alongside regulatory requirements to create a stronger overall security posture.
+
+---
