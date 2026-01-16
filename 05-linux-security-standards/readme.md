@@ -471,3 +471,589 @@ The critical controls are broken into three groups to help organizations priorit
 * **Method:** Testing that simulates the objectives and tactics of a real attacker, covering internal, external, and cloud-based hosts and applications.
 
 ---
+
+# 🛡️ Getting a Start on CIS Critical Security Controls 1 and 2
+
+## 📘 Overview
+
+The foundation of any robust security framework is knowing exactly what you are protecting. This concept is embodied in **CIS Critical Security Controls 1 and 2**:
+
+* **Control 1:** Inventory and Control of Hardware Assets.
+* **Control 2:** Inventory and Control of Software Assets.
+
+**The Philosophy:** You cannot secure a device or application if you don't know it exists.
+
+In this section, we will explore a "zero-budget" approach to gathering this critical inventory data using only the **native commands** already built into your Linux host.
+
+---
+
+## 🖥️ Critical Control 1: Hardware Inventory
+
+Gathering hardware information on Linux is straightforward because Linux treats almost everything as a file. We can extract detailed system parameters by reading specific files in the `/proc` directory.
+
+### 1. The `/proc` Filesystem
+
+The `/proc` directory is a **virtual filesystem**. It doesn't contain real files on your hard drive; instead, it contains dynamic files that reflect the current state of the kernel and hardware in real-time.
+
+#### 🧠 CPU Information
+
+To see details about your processor (CPU model, speed, cache size, core count, etc.), you can read the `/proc/cpuinfo` file.
+
+**Command:**
+
+```bash
+cat /proc/cpuinfo
+
+```
+
+**Output Analysis:**
+
+```text
+processor       : 0
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 158
+model name      : Intel(R) Xeon(R) CPU E3-1505M v6 @ 3.00GHz
+stepping        : 9
+microcode       : 0xde
+cpu MHz         : 3000.003
+cache size      : 8192 KB
+physical id     : 0
+siblings        : 1
+core id         : 0
+cpu cores       : 1
+...
+flags           : fpu vme de pse ... (lists supported CPU features like 'vmx' for virtualization)
+bugs            : cpu_meltdown spectre_v1 ... (lists known hardware bugs)
+bogomips        : 6000.00
+
+```
+
+* **`model name`**: Tells you exactly what chip is inside.
+* **`flags`**: Shows capabilities (e.g., `aes` for encryption acceleration).
+* **`bugs`**: Shows hardware vulnerabilities the CPU is susceptible to (like Spectre/Meltdown).
+
+#### 💾 Memory Information
+
+To see details about your RAM (Total, Free, Swap, Buffers), read `/proc/meminfo`.
+
+**Command:**
+
+```bash
+cat /proc/meminfo
+
+```
+
+**Output Analysis:**
+
+```text
+MemTotal:        8025108 kB   (Total RAM ~8GB)
+MemFree:         4252804 kB   (Unused RAM)
+MemAvailable:    6008020 kB   (RAM available for new apps)
+Buffers:          235416 kB
+Cached:          1486592 kB
+SwapCached:            0 kB
+...
+
+```
+
+#### 🌐 Network Parameters
+
+You can dig even deeper to find specific TCP/IP settings. These are located in:
+`/proc/sys/net/ipv4`
+
+---
+
+### 🐧 Operating System Version
+
+Knowing "what hardware I have" often includes "what OS runs on it." There are multiple ways to find this.
+
+**Method 1: `/proc/version` (Kernel & Compiler info)**
+
+```bash
+$ cat /proc/version
+Linux version 5.8.0-38-generic ... (Ubuntu 9.3.0-17ubuntu1~20.04) ...
+
+```
+
+**Method 2: `/etc/issue` (Distribution Release)**
+
+```bash
+$ cat /etc/issue
+Ubuntu 20.04.1 LTS \n \l
+
+```
+
+**Method 3: `uname` (Kernel Version)**
+
+```bash
+$ uname -v
+#43~20.04.1-Ubuntu SMP Tue Jan 12 16:39:47 UTC 2021
+
+```
+
+> **Note:** While OS version is technically software, it is often tracked in the Hardware Inventory because it is the base layer of the system.
+
+---
+
+### 🧰 The "Give Me Everything" Command: `lshw`
+
+If you want a complete dump of all hardware information in one go, use `lshw`.
+
+* **Pros:** Extremely detailed.
+* **Cons:** Can be *too* detailed (pages of output). You usually want to be selective.
+
+---
+
+## 📜 Automating Inventory: A Custom Bash Script
+
+Instead of running ten different commands manually, organizations often write a simple script to collect exactly what they need.
+
+Below is a custom script (`hwinven.sh`) that combines `fdisk`, `dmesg`, `dmidecode`, and standard text processing (`grep`, `awk`, `cut`) to generate a clean report.
+
+### 📝 The Script (`hwinven.sh`)
+
+```bash
+echo -n "Basic Inventory for Hostname: "
+uname -n
+#
+echo =====================================
+# Extract System Info (Manufacturer, Product Name)
+dmidecode | sed -n '/System Information/,+2p' | sed 's/\x09//'
+# Check for Hypervisors (Virtualization)
+dmesg | grep Hypervisor
+# Get Serial Numbers (ignoring empty ones)
+dmidecode | grep "Serial Number" | grep -v "Not Specified" | grep -v None
+#
+echo =====================================
+echo "OS Information:"
+uname -o -r
+# Check RedHat specific release file
+if [ -f /etc/redhat-release ]; then
+ echo -n " "
+ cat /etc/redhat-release
+fi
+# Check Standard Issue file
+if [ -f /etc/issue ]; then
+ cat /etc/issue
+fi
+#
+echo =====================================
+echo "IP information: "
+# Get IP address (excluding localhost and IPv6 loopback)
+ip ad | grep inet | grep -v "127.0.0.1" | grep -v "::1/128" | tr -s " " | cut -d " " -f 3
+#
+echo =====================================
+echo "CPU Information: "
+# Get CPU Model and Vendor, sort and remove duplicates
+cat /proc/cpuinfo | grep "model name\|MH\|vendor_id" | sort -r | uniq
+echo -n "Socket Count: "
+cat /proc/cpuinfo | grep processor | wc -l
+echo -n "Core Count (Total): "
+# Sum up core counts
+cat /proc/cpuinfo | grep cores | cut -d ":" -f 2 | awk '{ sum+=$1} END {print sum}'
+#
+echo =====================================
+echo "Memory Information: "
+grep MemTotal /proc/meminfo | awk '{print $2,$3}'
+#
+echo =====================================
+echo "Disk Information: "
+# List physical disks
+fdisk -l | grep Disk | grep dev
+
+```
+
+### 📤 The Script Output
+
+When you run this script (using `sudo` because `fdisk` and `dmidecode` require root), you get a beautifully formatted inventory report.
+
+**Command:**
+
+```bash
+sudo ./hwinven.sh
+
+```
+
+**Result:**
+
+```text
+Basic Inventory for Hostname: ubuntu
+=====================================
+System Information
+Manufacturer: VMware, Inc.
+Product Name: VMware Virtual Platform
+[    0.000000] Hypervisor detected: VMware
+ Serial Number: VMware-56 4d 5c ce 85 8f b5 52-65 40 f0 92 02 33 2d 05
+=====================================
+OS Information:
+5.8.0-45-generic GNU/Linux
+Ubuntu 20.04.2 LTS \n \l
+=====================================
+IP information:
+192.168.122.113/24
+fe80::1ed6:5b7f:5106:1509/64
+=====================================
+CPU Information:
+vendor_id       : GenuineIntel
+model name      : Intel(R) Xeon(R) CPU E3-1505M v6 @ 3.00GHz
+cpu MHz         : 3000.003
+Socket Count: 2
+Core Count (Total): 2
+=====================================
+Memory Information:
+8025036 kB
+=====================================
+Disk Information:
+Disk /dev/loop0: 65.1 MiB, 68259840 bytes, 133320 sectors
+Disk /dev/loop1: 55.48 MiB, 58159104 bytes, 113592 sectors
+Disk /dev/loop2: 218.102 MiB, 229629952 bytes, 448496 sectors
+...
+Disk /dev/sda: 40 GiB, 42949672960 bytes, 83886080 sectors
+...
+
+```
+
+### 🔍 Key Takeaways from the Output
+
+1. **System Information:** It correctly identified this as a **VMware Virtual Platform**, not physical hardware.
+2. **IP Information:** It listed both IPv4 (`192.168...`) and IPv6 (`fe80...`) addresses.
+3. **Disk Information:** It listed the main hard drive (`/dev/sda`, 40 GiB) and several `loop` devices (often used by Snap packages in Ubuntu).
+
+---
+
+# 📦 Critical Control 2 – Software Inventory
+
+## 📘 Overview
+
+**CIS Critical Control 2** focuses on "Inventory and Control of Software Assets."
+Just like with hardware, you cannot secure your environment if you don't know what software is installed. Unpatched or unauthorized software is a primary vector for attacks.
+
+We will explore two ways to achieve this:
+
+1. **Native Linux Commands:** Using package managers (`apt`, `dpkg`, `rpm`).
+2. **Advanced Tooling:** Using **OSQuery** for a database-driven approach.
+
+---
+
+## 🐧 Part 1: Native Linux Inventory Commands
+
+### 1. Using `apt` (Debian/Ubuntu)
+
+The easiest way to get a count of installed packages is using `apt`.
+
+**Command:**
+
+```bash
+sudo apt list --installed | wc -l
+
+```
+
+**Output:**
+
+```text
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+1735
+
+```
+
+**Insight:**
+
+* The system has **1735** packages installed.
+* **Warning:** The `apt` command warns that its output format might change in future versions, so it's not ideal for automated scripts.
+
+### 2. Using `dpkg` (Debian/Ubuntu)
+
+For detailed information that is script-friendly, `dpkg` is the better tool.
+
+**Command: List All Packages**
+
+```bash
+dpkg -l
+
+```
+
+**Output:**
+
+```text
+Name                       Version               Description
+====================================================================================
+acpi-support               0.136.1               scripts for handling many ACPI events
+acpid                      1.0.10-5ubuntu2.1     Advanced Configuration and Power Interface
+adduser                    3.112ubuntu1          add and remove users and groups
+adium-theme-ubuntu         0.1-0ubuntu1          Adium message style for Ubuntu
+adobe-flash-properties-gtk 10.3.183.10-0lucid1   GTK+ control panel for Adobe Flash Player
+.... and so on ....
+
+```
+
+**Command: List Files Inside a Package**
+If you want to know exactly where `openssh-client` installed its files, use `-L`.
+
+```bash
+robv@ubuntu:~$ dpkg -L openssh-client
+
+```
+
+**Output:**
+
+```text
+/.
+/etc
+/etc/ssh
+/etc/ssh/ssh_config
+/etc/ssh/ssh_config.d
+/usr
+/usr/bin
+/usr/bin/scp
+/usr/bin/sftp
+/usr/bin/ssh
+...
+
+```
+
+### 3. Using `rpm` (Red Hat/CentOS/Fedora)
+
+For Red Hat-based systems, we use the **RPM (Red Hat Package Manager)**.
+
+**Command: List All Installed Packages**
+
+```bash
+rpm -qa
+
+```
+
+**Output:**
+
+```text
+libsepol-devel-2.0.41-3.fc13.i686
+wpa_supplicant-0.6.8-9.fc13.i686
+system-config-keyboard-1.3.1-1.fc12.i686
+... (and so on)
+
+```
+
+**Command: Get Info on a Specific Package**
+To get details (Version, Vendor, Build Date, License) about a package like `python`, use `-qi`.
+
+```bash
+rpm -qi python
+
+```
+
+**Output:**
+
+```text
+Name        : python                       Relocations: (not relocatable)
+Version     : 2.6.4                        Vendor: Fedora Project
+Release     : 27.fc13                      Build Date: Fri 04 Jun 2010 02:22:55 PM EDT
+Install Date: Sat 19 Mar 2011 08:21:36 PM  Build Host: x86-02.phx2.fedoraproject.org
+Group       : Development/Languages        Source RPM: python2.6.4-27.fc13.src.rpm
+Size        : 21238314                     License: Python
+Signature   : RSA/SHA256, Fri 04 Jun 2010 02:36:33 PM EDT, Key ID 7edc6ad6e8e40fde
+Packager    : Fedora Project
+URL         : http://www.python.org/
+Summary     : An interpreted, interactive, object-oriented programming language
+Description : Python is an interpreted, interactive, object-oriented programming ...
+
+```
+
+---
+
+## 🔍 Part 2: OSQuery (Advanced Inventory & Security)
+
+**Why use OSQuery?**
+Native commands (`dpkg`, `rpm`) produce text files that are hard to manage across 1,000 servers.
+**OSQuery** turns your operating system into a **SQL Database**. You can query it like a database to instantly find answers across Linux, Windows, and macOS.
+
+### 🛠️ Installing OSQuery on Ubuntu
+
+We need to add the repository and install the package.
+
+**Commands:**
+
+```bash
+wget https://github.com/osquery/osquery/releases/download/5.11.0/osquery_5.11.0-1.linux_amd64.deb
+
+cd ~/Downloads
+
+sudo dpkg -i osquery_5.11.0-1.linux_amd64.deb
+
+osqueryi --version
+```
+
+### 🧩 Components of OSQuery
+
+* **`osqueryd`**: The background daemon (service) that runs scheduled queries.
+* **`osqueryi`**: The **interactive shell**. This is where you type SQL commands to explore the system manually.
+* **`osqueryctl`**: A helper script to test configurations.
+
+---
+
+### 💻 Using the OSQuery Interactive Shell (`osqueryi`)
+
+Let's start the shell and see what tables are available.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ osqueryi
+```
+
+**Output:**
+
+```text
+Using a virtual database. Need help, type '.help'
+osquery> .help
+Welcome to the osquery shell. Please explore your OS!
+You are connected to a transient 'in-memory' virtual database.
+...
+
+```
+
+**Listing Tables:**
+To see what you can query (e.g., users, packages, wifi), type `.tables`.
+
+```bash
+osquery> .tables
+```
+
+**Output:**
+
+```text
+ => acpi_tables
+ => apparmor_events
+ => apt_sources
+ => arp_cache
+ => block_devices
+ ...
+```
+
+---
+
+### ⚡ Practical Queries for Security (Critical Controls 1 & 2)
+
+#### 1. Software Inventory (Control 2)
+
+Get the OS version details.
+
+**Query:**
+
+```sql
+select * from os_version;
+```
+
+**Output:**
+
+```text
++--------+-----------------------+-------+-------+-------+-------+----------+---------------+----------+--------+
+| name   | version               | major | minor | patch | build | platform | platform_like | codename | arch   |
++--------+-----------------------+-------+-------+-------+-------+----------+---------------+----------+--------+
+| Ubuntu | 25.04 (Plucky Puffin) | 25    | 4     | 0     |       | ubuntu   | debian        | plucky   | x86_64 |
++--------+-----------------------+-------+-------+-------+-------+----------+---------------+----------+--------+
+```
+
+#### 2. Network Inventory (Control 1)
+
+Find IP addresses (excluding the Loopback `lo` interface).
+
+**Query:**
+
+```sql
+select interface,address,mask from interface_addresses where interface NOT LIKE '%lo%';
+```
+
+**Output:**
+
+```text
++-----------+-----------+---------------+
+| interface | address   | mask          |
++-----------+-----------+---------------+
+| enp0s3    | 10.0.2.15 | 255.255.255.0 |
++-----------+-----------+---------------+
+```
+
+#### 3. View ARP Cache (Who are we talking to?)
+
+**Query:**
+
+```sql
+select * from arp_cache;
+```
+
+**Output:**
+
+```text
++-----------+-------------------+-----------+-----------+
+| address   | mac               | interface | permanent |
++-----------+-------------------+-----------+-----------+
+| 10.0.2.2  | 52:55:0a:00:02:02 | enp0s3    | 0         |
+| 10.0.2.20 | 00:00:00:00:00:00 | enp0s3    | 0         |
++-----------+-------------------+-----------+-----------+
+```
+
+#### 4. List Installed Packages (Control 2)
+
+**Query:**
+
+```sql
+select * from deb_packages limit 2;
+```
+
+**Output:**
+
+```text
++-----------------+------------------+--------+------+-------+----------+----------------------+-----------------------------------------------------------+---------+----------+---------------+
+| name            | version          | source | size | arch  | revision | status               | maintainer                                                | section | priority | admindir      |
++-----------------+------------------+--------+------+-------+----------+----------------------+-----------------------------------------------------------+---------+----------+---------------+
+| accountsservice | 23.13.9-7ubuntu1 |        | 552  | amd64 | 7ubuntu1 | install ok installed | Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com> | admin   | optional | /var/lib/dpkg |
+| acl             | 2.3.2-2          |        | 192  | amd64 | 2        | install ok installed | Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com> | utils   | optional | /var/lib/dpkg |
++-----------------+------------------+--------+------+-------+----------+----------------------+-----------------------------------------------------------+---------+----------+---------------+
+```
+
+---
+
+### 🛡️ Advanced Security: Malware Detection (Control 10)
+
+We can go beyond simple inventory. We can list running processes and **calculate their SHA256 Hash**.
+
+* **Why?** Malware often hides by using a fake name (e.g., `bash` or `update-notifier`).
+* **The Fix:** If you check the **Hash** (Digital Fingerprint), you can see if the `bash` process is the *real* `bash` or a virus pretending to be `bash`.
+
+**Query:**
+
+```sql
+SELECT DISTINCT h.sha256, p.name, u.username
+FROM processes AS p
+INNER JOIN hash AS h ON h.path = p.path
+INNER JOIN users AS u ON u.uid = p.uid
+ORDER BY start_time DESC
+LIMIT 5;
+```
+
+**Output:**
+
+```text
+W0116 10:38:58.135358  5862 filesystem.cpp:139] Cannot read /opt/osquery/bin/osqueryd size exceeds limit: 86508160 > 52428800
++------------------------------------------------------------------+---------------+----------+
+| sha256                                                           | name          | username |
++------------------------------------------------------------------+---------------+----------+
+|                                                                  | osqueryi      | hashim   |
+| b8d3da2bedb52234e236bb3702310d77c3bdc429321552e60d05717896f6b049 | gvfsd-recent  | hashim   |
+| 5ff1ea84ba9ecb43e4da3f51145e052593afd9cab4f5a48c46c6b4a165b3dda8 | gvfsd-network | hashim   |
+| 4dd760d3fef6dfdb489ad1465279926c1b2d784954445046573ecd77f5f5ce9e | gvfsd-dnssd   | hashim   |
+| 5ef5374cb79a1b84b06bcac6a4d1ecb3671cfb46f80930824b0d3cdf77c48065 | gvfsd-wsdd    | hashim   |
++------------------------------------------------------------------+---------------+----------+
+```
+
+### 🚀 Conclusion
+
+With just a few queries, **OSQuery** allows us to:
+
+1. Verify OS versions (Find vulnerable hosts).
+2. Inventory software packages (Find unpatched apps).
+3. Hash running processes (Detect Malware).
+
+This makes it an incredibly powerful tool for meeting **CIS Critical Controls 1, 2, 10, and 17**.
+
+---
