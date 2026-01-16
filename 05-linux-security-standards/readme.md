@@ -746,7 +746,6 @@ The easiest way to get a count of installed packages is using `apt`.
 
 ```bash
 sudo apt list --installed | wc -l
-
 ```
 
 **Output:**
@@ -770,7 +769,6 @@ For detailed information that is script-friendly, `dpkg` is the better tool.
 
 ```bash
 dpkg -l
-
 ```
 
 **Output:**
@@ -784,15 +782,13 @@ adduser                    3.112ubuntu1          add and remove users and groups
 adium-theme-ubuntu         0.1-0ubuntu1          Adium message style for Ubuntu
 adobe-flash-properties-gtk 10.3.183.10-0lucid1   GTK+ control panel for Adobe Flash Player
 .... and so on ....
-
 ```
 
 **Command: List Files Inside a Package**
 If you want to know exactly where `openssh-client` installed its files, use `-L`.
 
 ```bash
-robv@ubuntu:~$ dpkg -L openssh-client
-
+hashim@Hashim:~$ dpkg -L openssh-client
 ```
 
 **Output:**
@@ -809,7 +805,6 @@ robv@ubuntu:~$ dpkg -L openssh-client
 /usr/bin/sftp
 /usr/bin/ssh
 ...
-
 ```
 
 ### 3. Using `rpm` (Red Hat/CentOS/Fedora)
@@ -820,7 +815,6 @@ For Red Hat-based systems, we use the **RPM (Red Hat Package Manager)**.
 
 ```bash
 rpm -qa
-
 ```
 
 **Output:**
@@ -830,7 +824,6 @@ libsepol-devel-2.0.41-3.fc13.i686
 wpa_supplicant-0.6.8-9.fc13.i686
 system-config-keyboard-1.3.1-1.fc12.i686
 ... (and so on)
-
 ```
 
 **Command: Get Info on a Specific Package**
@@ -838,7 +831,6 @@ To get details (Version, Vendor, Build Date, License) about a package like `pyth
 
 ```bash
 rpm -qi python
-
 ```
 
 **Output:**
@@ -1055,5 +1047,276 @@ With just a few queries, **OSQuery** allows us to:
 3. Hash running processes (Detect Malware).
 
 This makes it an incredibly powerful tool for meeting **CIS Critical Controls 1, 2, 10, and 17**.
+
+---
+
+# 🛡️ Applying a CIS Benchmark: Securing SSH on Linux
+
+## 📘 Overview
+
+When securing a server, relying on guesswork isn't enough. You need a standard checklist. This is what the **CIS (Center for Internet Security) Benchmarks** provide. They are industry-standard "best practice" guides for securing operating systems and software.
+
+**The Reality of Benchmarks:**
+
+* You typically **never** implement 100% of a benchmark.
+* Security settings can break functionality.
+* The goal is to evaluate each recommendation and create an organization-specific "Build Document."
+
+In this guide, we will use the **CIS Benchmark for Ubuntu 20.04** to secure **SSH (Secure Shell)**, the primary door for remote administration on Linux.
+
+---
+
+## 🏗️ Step 1: Preparation (Update & Install)
+
+Before securing the system, we must ensure the OS is up to date and the SSH service is actually installed.
+
+**1. Update the System**
+We run two commands in sequence using `&&` (the second only runs if the first succeeds).
+
+* `update`: Refreshes the list of available software.
+* `upgrade`: Installs the newest versions.
+
+**Command:**
+
+```bash
+sudo apt update && sudo apt upgrade
+```
+
+**2. Install SSH Server**
+SSH is not always installed by default on desktop versions of Ubuntu.
+
+**Command:**
+
+```bash
+sudo apt-get install openssh-server
+```
+
+---
+
+## 📋 The CIS SSH Recommendations
+
+The benchmark lists **22 separate recommendations** (Section 5.2) for SSH. Here are a few key examples:
+
+* **5.2.9:** Disable root login (Prevent the "God" account from logging in remotely).
+* **5.2.12:** Use strong Ciphers (Ensure encryption is modern and unbreakable).
+* **5.2.15:** Set Idle Timeout (Kick off users who walk away from their desks).
+
+Let's implement two of the most critical checks in detail.
+
+---
+
+## 🔒 Deep Dive 1: Disable Root Login (5.2.9)
+
+**The Problem:**
+The "root" user exists on every Linux system. If you allow root login, attackers already know the **username** (50% of the puzzle); they just need to guess the password.
+**The Goal (Non-Repudiation):**
+Every administrator should log in with their own **named account** (e.g., `robv` or `hashim`). If an incident occurs, the logs will show exactly *who* did it. You cannot claim "it wasn't me" if the log shows your specific username.
+
+**1. Audit (Check current status)**
+We check the running configuration (`-T`) for the `permitrootlogin` setting.
+
+**Command:**
+
+```bash
+sudo sshd -T | grep permitrootlogin
+```
+
+**Output:**
+
+```text
+permitrootlogin without-password
+```
+
+* **Verdict:** **Non-Compliant.** This setting allows root login using keys (certificates). We want to block it entirely.
+
+**2. Remediation (Fix it)**
+We edit the configuration file `/etc/ssh/sshd_config`. We need to change the setting to `no`.
+
+**3. Verification**
+After saving the file and reloading SSH, we check again.
+
+**Command:**
+
+```bash
+sudo sshd -T | grep permitrootlogin
+```
+
+**Output:**
+
+```text
+permitrootlogin no
+```
+
+* **Verdict:** **Compliant.**
+
+---
+
+## 🔐 Deep Dive 2: Ensure Strong Ciphers (5.2.12)
+
+**The Problem:**
+SSH supports many encryption algorithms (Ciphers). Some older ones (like DES, 3DES, or CBC modes) are weak and can be cracked.
+**The Goal:**
+Force SSH to use only strong, modern encryption strings.
+
+**1. Audit (Check current status)**
+
+**Command:**
+
+```bash
+sudo sshd -T | grep Ciphers
+```
+
+**Output:**
+
+```text
+ciphers chacha20-poly1305@openssh.com,aes128-ctr,aes192-ctr,aes256-ctr,aes128-gcm@openssh.com,aes256-gcm@openssh.com
+```
+
+* **Verdict:** **Mixed.** While strong ciphers are present, some non-compliant ones are also enabled. An attacker could force a "downgrade" to a weaker cipher.
+
+**2. Remediation (Fix it)**
+We edit `/etc/ssh/sshd_config`. Often, the `Ciphers` line doesn't exist, so we must add it manually at the bottom.
+
+**Text to Add:**
+
+```text
+# Ciphers and keying
+Ciphers aes256-ctr,aes192-ctr,aes128-ctr
+```
+
+**3. Reload and Verify**
+Reload the service so changes take effect.
+
+**Command:**
+
+```bash
+sudo systemctl reload sshd
+```
+
+**Check again:**
+
+```bash
+cat sshd_config | grep Cipher
+```
+
+**Output:**
+
+```text
+# Ciphers and keying
+Ciphers aes256-ctr,aes192-ctr,aes128-ctr
+```
+
+---
+
+## 🕵️ Verification with Nmap
+
+Trusting your own configuration file is good, but verifying from the "outside" is better. We can use `nmap` with a specific script (`ssh2-enum-algos`) to ask the server exactly what encryption it supports.
+
+**Command:**
+
+```bash
+sudo nmap -p22 -Pn --open 127.0.0.1 --script ssh2-enum-algos.nse
+```
+
+**Output:**
+
+```text
+Starting Nmap 7.80 ( https://nmap.org ) at 2021-02-08 15:22 Eastern Standard Time
+Nmap scan report for ubuntu.defaultroute.ca (127.0.0.1)
+Host is up (0.00013s latency).
+PORT STATE SERVICE
+22/tcp open ssh
+| ssh2-enum-algos:
+|   encryption_algorithms: (3)
+|       aes256-ctr
+|       aes192-ctr
+|       aes128-ctr
+...
+Nmap done: 1 IP address (1 host up) scanned in 4.09 seconds
+```
+
+* **Result:** The server now **only** offers the three strong ciphers we configured. The weak ones are gone.
+
+---
+
+# 🛡️ SSH Hardening: Quick Security Wins
+
+These three settings are essential for any Linux server. They prevent resource exhaustion and improve auditing.
+
+### 🛠️ Step 1: Edit the Configuration File
+
+Open the file with `nano`.
+
+**Command:**
+
+```bash
+sudo nano /etc/ssh/sshd_config
+```
+
+### 🛠️ Step 2: Locate and Modify Settings
+
+#### 1. Logging Level (5.2.4)
+
+Change logging from `INFO` to `VERBOSE`. This ensures the logs record the **fingerprint of the key** used to log in, which is crucial for forensic analysis.
+
+**Configuration:**
+
+```text
+LogLevel VERBOSE
+```
+
+#### 2. Idle Timeout (5.2.15)
+
+This kicks off users who leave their session open.
+
+* `ClientAliveInterval 300`: Server sends a "Are you there?" check every 300 seconds (5 minutes).
+* `ClientAliveCountMax 0`: If the client doesn't respond instantly (meaning they are idle), disconnect them.
+
+**Configuration:**
+
+```text
+ClientAliveInterval 300
+ClientAliveCountMax 0
+```
+
+#### 3. MaxSessions (5.2.22)
+
+This limits the number of shell sessions per connection. Attackers use "Multiplexing" to open hundreds of shells over a single connection to crash the server (DoS). Limiting this to 2 or 10 stops that attack.
+
+**Configuration:**
+
+```text
+MaxSessions 2
+```
+
+### 🚀 Step 3: Save, Test, and Restart
+
+**1. Save and Exit:**
+
+* Press `Ctrl + O` then `Enter`.
+* Press `Ctrl + X`.
+
+**2. Test Syntax:**
+Always test before restarting. If you made a typo, this command will tell you *before* you break the server.
+
+**Command:**
+
+```bash
+sudo sshd -t
+```
+
+*(If there is no output, the syntax is correct).*
+
+**3. Restart SSH:**
+Apply the changes.
+
+**Command:**
+
+```bash
+sudo systemctl restart ssh
+```
+
+Your SSH server is now significantly harder to attack! ✅
+
 
 ---
