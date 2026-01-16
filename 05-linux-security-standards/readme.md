@@ -1,5 +1,33 @@
 # 🛡️ Linux Security Standards
 
+<details>
+<summary><strong>Table of Contents</strong></summary>
+
+- [Section Objectives](#section-objectives)
+- [Technical Requirements](#technical-requirements)
+- [Securing Linux Hosts](#securing-linux-hosts)
+	- [Why Do I Need to Secure My Linux Hosts?](#why-do-i-need-to-secure-my-linux-hosts)
+	- [The Auto-Update Process](#the-auto-update-process)
+	- [Enterprise Management: Manual vs. Automatic](#enterprise-management-manual-vs-automatic)
+	- [The Manual Update Commands](#the-manual-update-commands)
+- [Cloud-Specific Security Considerations](#cloud-specific-security-considerations)
+	- [The Update Problem (Stale Images)](#the-update-problem-stale-images)
+	- [Host Firewalls & The "Ping" Problem](#host-firewalls--the-ping-problem)
+	- [Remote Access (SSH) Exposure](#remote-access-ssh-exposure)
+- [Commonly Encountered Industry-Specific Security Standards](#commonly-encountered-industry-specific-security-standards)
+- [The Center for Internet Security (CIS) Critical Controls](#the-center-for-internet-security-cis-critical-controls)
+	- [The Three Implementation Groups (IGs)](#the-three-implementation-groups-igs)
+	- [The 18 CIS Critical Controls (Version 8)](#the-18-cis-critical-controls-version-8)
+- [Getting a Start on CIS Critical Security Controls 1 and 2](#getting-a-start-on-cis-critical-security-controls-1-and-2)
+	- [Critical Control 1: Hardware Inventory](#critical-control-1-hardware-inventory)
+	- [Critical Control 2 – Software Inventory](#critical-control-2--software-inventory)
+- [OSQuery (Advanced Inventory & Security)](#osquery-advanced-inventory--security)
+- [Applying a CIS Benchmark: Securing SSH on Linux](#applying-a-cis-benchmark-securing-ssh-on-linux)
+	- [Deep Dive 1: Disable Root Login (5.2.9)](#deep-dive-1-disable-root-login-529)
+	- [Deep Dive 2: Ensure Strong Ciphers (5.2.12)](#deep-dive-2-ensure-strong-ciphers-5212)
+
+</details>
+
 Welcome to the comprehensive guide on Linux Security Standards. This section establishes the "big picture" of security, exploring why Linux hosts—regardless of their environment—require continuous care and maintenance immediately following installation and throughout their entire lifecycle.
 
 ---
