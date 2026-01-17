@@ -275,3 +275,257 @@ Because it faces the public internet, the focus shifts from **performance** to *
 * Hackers often use automated scripts to guess subdomains (`admin.example.com`, `test.example.com`) to map your network. Rate limiting slows this process down significantly.
 
 ---
+
+# 🛠️ Common DNS Implementations & Building an Internal BIND Server
+
+## 📘 Overview
+
+In the Linux world, there are two primary ways to implement DNS. Depending on the size of your organization and your specific needs (like blocking ads or integrating with DHCP), you will likely choose one of the following:
+
+### 1. BIND (named)
+
+* **Full Name:** Berkeley Internet Name Domain.
+* **Process Name:** `named` (Name Daemon).
+* **Reputation:** The "Gold Standard." It is the most flexible, complete, and widely used DNS server on the internet.
+* **Pros:** Extremely powerful, standard in enterprise environments.
+* **Cons:** Can be difficult to configure and troubleshoot due to its complexity.
+* **Usage:** Used for both internal corporate DNS and public internet-facing DNS.
+
+### 2. Dnsmasq (DNS Masquerade)
+
+* **Reputation:** The "Lightweight Champion."
+* **Usage:** Commonly found on home routers, firewalls, and IoT devices (like the Raspberry Pi).
+* **Key Features:**
+* **DHCP Integration:** It can handle both DNS and IP address assignment (DHCP). It automatically updates DNS records when a device gets a new IP.
+* **Blocklists:** It is the engine behind **Pi-hole**, a popular tool for blocking ads and tracking domains network-wide.
+* **Small Footprint:** Uses very little RAM and CPU.
+
+
+
+---
+
+## 🏗️ Step-by-Step: Installing & Configuring BIND
+
+In this guide, we will focus on **BIND** to build a standard **Internal DNS Server**.
+
+### 1️⃣ Installation
+
+Installing BIND on Ubuntu is a single command.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo apt install bind9 -y
+```
+
+### 2️⃣ Understanding the Configuration Structure
+
+Unlike older versions that used one giant file, modern BIND splits configuration into logical pieces. The main file `/etc/bind/named.conf` simply "includes" other files.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ sudo cat /etc/bind/named.conf
+```
+
+**Output:**
+
+```c
+// This is the primary configuration file for the BIND DNS server named.
+// ...
+// If you are just adding zones, please do that in /etc/bind/named.conf.local
+
+include "/etc/bind/named.conf.options";
+include "/etc/bind/named.conf.local";
+include "/etc/bind/named.conf.default-zones";
+```
+
+* **`named.conf.options`**: Global server settings (who can query, who to forward to).
+* **`named.conf.local`**: Definitions for your specific domains (zones).
+* **`named.conf.default-zones`**: Standard zones like `localhost`.
+
+---
+
+### 3️⃣ Step 3: Configuring Global Options
+
+We edit `/etc/bind/named.conf.options` to define how the server behaves.
+
+**Key Changes:**
+
+1. **ACL "trusted":** Define who is allowed to talk to us (e.g., our internal subnets).
+2. **Forwarders:** If we don't know the answer (like `google.com`), ask Google (`8.8.8.8`) or Cloudflare (`1.1.1.1`).
+3. **Allow-query:** Restrict questions to `localhost` and our internal subnet (`10.0.2.0/24`).
+4. **Listen-on:** Listen on port 53 (standard DNS).
+5. **Recursion:** Set to `yes` (required for internal servers so they can look up external websites).
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ cat /etc/bind/named.conf.options
+```
+
+**File Content:**
+
+```c
+options {
+	directory "/var/cache/bind";
+
+	// If there is a firewall between you and nameservers you want
+	// to talk to, you may need to fix the firewall to allow multiple
+	// ports to talk.  See http://www.kb.cert.org/vuls/id/800113
+
+	// If your ISP provided one or more IP addresses for stable 
+	// nameservers, you probably want to use them as forwarders.  
+	// Uncomment the following block, and insert the addresses replacing 
+	// the all-0's placeholder.
+
+	forwarders { 8.8.8.8; 8.8.4.4; 1.1.1.1; };
+	
+	allow-query { localhost; 10.0.2.0/24; };
+
+	//========================================================================
+	// If BIND logs error messages about the root key being expired,
+	// you will need to update your keys.  See https://www.isc.org/bind-keys
+	//========================================================================
+	dnssec-validation no;
+	
+	listen-on port 53 { 127.0.0.1; 10.0.2.15; };
+        
+        recursion yes;
+ 
+	// listen-on-v6 { any; };
+};
+```
+
+---
+
+### 4️⃣ Step 4: Defining the Local Zone
+
+We need to tell BIND that we are the "Master" (Authoritative) server for the domain `hashim.net`. We verify this in `/etc/bind/named.conf.local`.
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ cat /etc/bind/named.conf.local
+```
+
+**File Content:**
+
+```c
+//
+// Do any local configuration here
+//
+
+// Consider adding the 1918 zones here, if they are not used in your
+// organization
+//include "/etc/bind/zones.rfc1918";
+
+// Hashim.net Zone Declaration
+zone "hashim.net" IN {
+    type master;             // Hum iske Maalik (Master) hain
+    file "/var/cache/bind/hashim.net.zone";  // Asal file kahan hogi?
+    allow-update { none; };
+};
+```
+
+* **`type master;`**: We hold the original copy of the data.
+* **`file ...`**: This points to where the actual list of IP addresses is stored.
+
+---
+
+### 5️⃣ Step 5: Creating the Zone File
+
+This is the "Address Book." It maps names (like `gateway` or `pc1`) to IP addresses. The file is located at `/var/cache/bind/hashim.net.zone`.
+
+**Key Components:**
+
+* **SOA (Start of Authority):** Describes the domain administrator and settings.
+* **Serial:** A number you increase every time you edit the file (so secondary servers know to update).
+* **NS (Name Server):** Who is the DNS server? (`ns1.hashim.net`).
+* **A (Address) Records:** The actual mappings (e.g., `gateway` -> `10.0.2.1`).
+
+**Command:**
+
+```bash
+hashim@Hashim:~$ cat /var/cache/bind/hashim.net.zone
+```
+
+**File Content:**
+
+```text
+;
+; BIND data file for local loopback interface
+;$TTL	604800
+@	IN	SOA	localhost. root.localhost. (
+			      2		; Serial
+			 604800		; Refresh
+			  86400		; Retry
+			2419200		; Expire
+			 604800 )	; Negative Cache TTL
+;
+@	IN	NS	ns1.hashim.net.
+ns1       IN      A       10.0.2.15
+gateway   IN      A       10.0.2.1
+pc1       IN      A       10.0.2.5
+```
+
+---
+
+### 6️⃣ Step 6: Restart and Verify
+
+Finally, we restart the service and test it using `dig` (Domain Information Groper).
+
+**1. Restart Service:**
+
+```bash
+hashim@Hashim:~$ sudo systemctl restart bind9
+```
+
+**2. Check Status:**
+
+```bash
+hashim@Hashim:~$ sudo systemctl status bind9
+```
+
+**Output Analysis:**
+
+```text
+● named.service - BIND Domain Name Server
+     Loaded: loaded (/usr/lib/systemd/system/named.service; enabled; preset: enabled)
+     Active: active (running) since Sat 2026-01-17 09:42:42 PKT; 65ms ago
+ ...
+Jan 17 09:42:42 Hashim named[3964]: zone hashim.net/IN: loaded serial 2
+Jan 17 09:42:42 Hashim named[3964]: all zones loaded
+```
+
+* **Active (running):** The server started successfully.
+* **loaded serial 2:** It successfully read our `hashim.net` zone file.
+
+**3. Test Query (`dig`):**
+We ask our new server (`@10.0.2.15`) for the IP of `gateway.hashim.net`.
+
+```bash
+hashim@Hashim:~$ dig @10.0.2.15 gateway.hashim.net
+```
+
+**Output:**
+
+```text
+; <<>> DiG 9.20.11-0ubuntu0.2-Ubuntu <<>> @10.0.2.15 gateway.hashim.net
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 51396
+;; flags: qr aa rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; ANSWER SECTION:
+gateway.hashim.net.	604800	IN	A	10.0.2.1
+
+;; Query time: 3 msec
+;; SERVER: 10.0.2.15#53(10.0.2.15) (UDP)
+```
+
+* **status: NOERROR**: Success!
+* **ANSWER SECTION**: It correctly returned `10.0.2.1`.
+
+---
