@@ -1206,3 +1206,183 @@ At the time of writing, the standard Linux `dig` tool **cannot** make DoT querie
 To actually test DoT functionality (sending a query and getting an answer), we need a different tool called **`kdig`**, which is part of the `knot-dnsutils` package. This tool acts as an "advanced dig" capable of speaking TLS.
 
 ---
+
+# 🛠️ Exploring DoT with `knot-dnsutils` (Using Cloudflare)
+
+## 📘 Overview
+
+While the standard `dig` tool is excellent for basic DNS, it currently lacks native support for **DNS over TLS (DoT)**. To fill this gap, we use **`knot-dnsutils`**.
+
+* **Package:** `knot-dnsutils` is a Linux package containing advanced DNS tools.
+* **Tool:** **`kdig`** (Knot DNS Information Groper). It duplicates the functionality of `dig` but adds support for newer protocols like DoT.
+
+In this guide, we will install the tool and perform DoT queries. As requested, we will swap the text's default Google DNS examples for **Cloudflare DNS (`1.1.1.1`)**.
+
+---
+
+## 🏗️ Step 1: Installation
+
+To get started, we must install the package.
+
+**Command:**
+
+```bash
+sudo apt-get install knot-dnsutils
+```
+
+**
+
+---
+
+## 🔍 Step 2: Running a DoT Query (Debug Mode)
+
+We will query Cloudflare's DoT server (`1.1.1.1`) for the A record of `www.cisco.com`. We use specific flags to enable TLS and verify the connection.
+
+**Command:**
+
+```bash
+kdig -d +short @1.1.1.1 www.cisco.com A +tls-ca +tls-hostname=cloudflare-dns.com
+```
+
+**Output Analysis (Simulated for Cloudflare):**
+
+```text
+;; DEBUG: Querying for owner(www.cisco.com.), class(1), type(1), server(1.1.1.1), port(853), protocol(TCP)
+;; DEBUG: TLS, imported 129 system certificates
+;; DEBUG: TLS, received certificate hierarchy:
+;; DEBUG: #1, C=US,ST=California,L=San Francisco,O=Cloudflare, Inc.,CN=cloudflare-dns.com
+;; DEBUG: SHA-256 PIN: <Unique_Cloudflare_Hash_Here>
+;; DEBUG: #2, C=US,O=DigiCert Inc,CN=DigiCert TLS Hybrid ECC SHA384 2020 CA1
+;; DEBUG: TLS, skipping certificate PIN check
+;; DEBUG: TLS, The certificate is trusted.
+www.cisco.com.akadns.net.
+wwwds.cisco.com.edgekey.net.
+wwwds.cisco.com.edgekey.net.globalredir.akadns.net.
+e2867.dsca.akamaiedge.net.
+23.66.161.25
+```
+
+**Detailed Breakdown:**
+
+* **`-d` (Debug):** This flag reveals the "handshake" process.
+* It confirms the protocol is **TCP** on port **853** (the standard DoT port).
+* It displays the **Certificate Hierarchy**, showing that we connected to `CN=cloudflare-dns.com` and that the certificate is trusted.
+
+
+* **`+short`**: Removes the messy headers and shows only the final answer (IP addresses).
+
+---
+
+## 📜 Step 3: Removing Debug Mode
+
+If we remove the `-d` flag, the output looks almost identical to a standard `dig` command.
+
+**Command:**
+
+```bash
+kdig +short @1.1.1.1 www.cisco.com A +tls-ca +tls-hostname=cloudflare-dns.com
+```
+
+**Output:**
+
+```text
+www.cisco.com.akadns.net.
+wwwds.cisco.com.edgekey.net.
+wwwds.cisco.com.edgekey.net.globalredir.akadns.net.
+e2867.dsca.akamaiedge.net.
+23.66.161.25
+```
+
+**
+
+---
+
+## 📊 Step 4: The Full Output (Verbose)
+
+If we remove the `+short` flag, we see the full DNS response structure, including the TLS session details.
+
+**Command:**
+
+```bash
+kdig @1.1.1.1 www.cisco.com A +tls-ca +tls-hostname=cloudflare-dns.com +tls-sni=cloudflare-dns.com
+```
+
+**Output:**
+
+```text
+;; TLS session (TLS1.3)-(ECDHE-X25519)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+;; ->>HEADER<<- opcode: QUERY; status: NOERROR; id: 57771
+;; Flags: qr rd ra; QUERY: 1; ANSWER: 5; AUTHORITY: 0; ADDITIONAL: 1
+
+;; EDNS PSEUDOSECTION:
+;; Version: 0; flags: ; UDP size: 512 B; ext-rcode: NOERROR
+;; PADDING: 240 B
+
+;; QUESTION SECTION:
+;; www.cisco.com.       IN      A
+
+;; ANSWER SECTION:
+www.cisco.com.          3571    IN      CNAME   www.cisco.com.akadns.net.
+www.cisco.com.akadns.net. 120   IN      CNAME   wwwds.cisco.com.edgekey.net.
+... (Chain of CNAMEs) ...
+e2867.dsca.akamaiedge.net. 19   IN      A       23.66.161.25
+
+;; Received 468 B
+;; Time 2026-01-20 11:05:33 PKT
+;; From 1.1.1.1@853(TCP) in 121.4 ms
+```
+
+**Key Observations:**
+
+* **TLS Session:** The header confirms a secure `TLS1.3` session was established.
+* **Padding:** DoT often adds padding (extra zeros) to the packet size to prevent traffic analysis (guessing the query based on packet length).
+
+---
+
+## ⚙️ Step 5: Understanding the TLS Parameters
+
+To make DoT work securely, we used three specific parameters:
+
+1. **`+tls-ca`**:
+* Enforces validation. It tells `kdig` to use the system's Certificate Authority (CA) list to verify that Cloudflare's certificate is real.
+
+
+2. **`+tls-hostname=cloudflare-dns.com`**:
+* **The Problem:** We are querying the IP `1.1.1.1`. Certificates are issued to *names*, not *IPs*.
+* **The Fix:** This parameter tells `kdig`: "I know I am talking to 1.1.1.1, but check if the certificate belongs to `cloudflare-dns.com`." This matches the `CN` (Common Name) or `SAN` (Subject Alternative Name) on the cert.
+
+
+3. **`+tls-sni=cloudflare-dns.com`**:
+* **SNI (Server Name Indication):** Some servers host multiple certificates on the same IP. This flag tells the server *which* name we are trying to reach so it serves the correct certificate.
+
+
+
+---
+
+## ⚠️ Step 6: What happens if you skip parameters?
+
+If you run `kdig` without the extra TLS flags, it will still work, but it defaults to **Opportunistic/Unverified TLS**.
+
+**Command:**
+
+```bash
+kdig +short @1.1.1.1 www.cisco.com A
+```
+
+**Output:**
+
+```text
+www.cisco.com.akadns.net.
+...
+23.66.161.25
+```
+
+**
+
+**Why is this risky?**
+By default, `kdig` does **not force verification** of the certificate against the hostname.
+
+* **The Result:** The traffic is encrypted, but you haven't verified *who* you are talking to.
+* **The Fix:** Always use specific hostnames and CA validation (`+tls-ca`) to ensure the server is the one you intended to query and that the response hasn't been tampered with.
+
+---
