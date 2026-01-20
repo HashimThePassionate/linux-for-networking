@@ -1386,3 +1386,153 @@ By default, `kdig` does **not force verification** of the certificate against th
 * **The Fix:** Always use specific hostnames and CA validation (`+tls-ca`) to ensure the server is the one you intended to query and that the response hasn't been tampered with.
 
 ---
+
+# 🛡️ DNS Security Extensions (DNSSEC)
+
+## 📘 Overview
+
+**DNSSEC (Domain Name System Security Extensions)** is a protocol designed to add a layer of trust to the DNS system.
+
+* **Goal:** To **validate** server responses. It proves that the IP address you received is the correct one and hasn't been tampered with by a hacker (Man-in-the-Middle).
+* **Mechanism:** It uses **cryptographic signatures** (Zone Certificates) rather than server certificates.
+* **No Encryption:** Unlike DoT or DoH, DNSSEC **does not encrypt** traffic. Anyone can still read your DNS queries. It only ensures the *integrity* of the answer.
+* **Ports:** It operates on standard DNS ports (**UDP/53** and **TCP/53**), just adding extra fields to the packet.
+
+---
+
+## 🔑 1. Viewing Public Keys (`DNSKEY`)
+
+To validate a signature, you need the public key of the zone. We can fetch this using `dig` with the `DNSKEY` record type.
+
+**Command:**
+
+```bash
+dig DNSKEY @dns.google example.com +short
+```
+
+**Output:**
+
+```text
+256 3 8 AwEAAa79LdJaZfIxVzyjq4H7yB4VqT/
+rIreB+N0jija+4bWHzNrwhSiu D/
+... (Truncated Public Key Data) ...
+257 3 8 AwEAAZ0aqu1rJ6orJynrRfNpPmayJZoAx9Ic2/
+Rl9VQWLMHyjxxem3VU
+... (Truncated Public Key Data) ...
+257 3 8 AwEAAbOFAxl+Lkt0UMglZizKEC1AxUu8zlj65KYatR5wBWMrh18TYzK/
+... (Truncated Public Key Data) ...
+
+```
+
+**Detailed Explanation of Output:**
+The output shows the public keys used by `example.com`.
+
+* **`256` (Zone Signing Key - ZSK):** This key is used to sign individual records (like A records) in the zone.
+* **`257` (Key Signing Key - KSK):** This key is used to sign the ZSKs. It acts as the "Master Key" for the zone.
+* **`3` (Protocol):** Always 3 for DNSSEC.
+* **`8` (Algorithm):** Specifies the cryptographic algorithm used (e.g., RSA/SHA-256).
+* **`AwEAA...`**: The actual Public Key data (Base64 encoded).
+
+---
+
+## 🔗 2. Viewing Delegation Records (`DS`)
+
+How do we trust the keys above? The parent zone (e.g., `.com`) holds a "fingerprint" of the child zone's (`example.com`) key. This is called the **Delegation of Signing (DS)** record.
+
+**Command:**
+
+```bash
+dig +short DS @dns.google example.com
+```
+
+**Output:**
+
+```text
+31589 8 1 3490A6806D47F17A34C29E2CE80E8A999FFBE4BE
+31589 8 2 CDE0D742D6998AA554A92D890F8184C698CFAC8A26FA59875A990C03E576343C
+43547 8 1 B6225AB2CC613E0DCA7962BDC2342EA4F1B56083
+43547 8 2 615A64233543F66F44D68933625B17497C89A70E858ED76A2145997EDF96A918
+...
+
+```
+
+**Detailed Explanation of Output:**
+These records prove the chain of trust.
+
+* **`31589` (Key Tag):** A short ID to identify which DNSKEY this refers to.
+* **`8` (Algorithm):** Matches the algorithm of the DNSKEY.
+* **`1` or `2` (Digest Type):** The hashing algorithm used for the fingerprint (`1` = SHA-1, `2` = SHA-256).
+* **`3490A...`**: The **Digest** (the actual fingerprint hash).
+
+---
+
+## 🛠️ 3. Verifying Protocol and Port (Debug Mode)
+
+We can confirm that DNSSEC does not require special ports (like DoT's 853) by running `dig` in debug mode.
+
+**Command:**
+
+```bash
+dig -d DNSKEY @dns.google example.com | grep DEBUG
+```
+
+**Output:**
+
+```text
+;; DEBUG: Querying for owner(example.com.), class(1), type(48),
+server(dns.google), port(53), protocol(UDP)
+
+```
+
+**Explanation:**
+
+* **`port(53)`**: Confirms it uses standard DNS ports.
+* **`protocol(UDP)`**: Confirms it uses standard UDP transport.
+
+---
+
+## ✍️ 4. Making a DNSSEC-Validated Query
+
+To actually perform a validation, we add the `+dnssec` flag to a standard query. This asks the server to send the data *and* the signature.
+
+**Command:**
+
+```bash
+dig +dnssec +short @dns.google www.example.com A
+```
+
+**Output:**
+
+```text
+93.184.216.34
+A 8 3 86400 20210316085034 20210223165712 45150 example.com. UyyNiGG0WDAsberOUza21vYos8vDc6aLq8FV9lvJT4YRBn6V8CTd3cdoljXV5uETcD54tuv1kLZWg7YZxSQDGFeNC3luZFkbrWAqPbHXy4D7TdeyLBK0R3xywGxgZIEfp9HMjpZpikFQuKC/iFvd14uJhoquMqFPFvTfJB/sXJ8=
+
+```
+
+**Detailed Explanation of Output:**
+
+* **`93.184.216.34`**: The actual answer (A Record).
+* **The Second Line (RRSIG):** This is the **Resource Record Signature**.
+* **`A`**: Type covered (Signature for an A record).
+* **`8`**: Algorithm used.
+* **`86400`**: TTL (Time to Live).
+* **`2021...`**: Signature Expiration and Inception dates (validity period).
+* **`45150`**: Key Tag (ID of the key used to sign this).
+* **`example.com.`**: The signer's name.
+* **`UyyNi...`**: The cryptographic signature itself.
+
+
+
+---
+
+## 📉 Industry Adoption and Summary
+
+**Why isn't DNSSEC everywhere?**
+
+* **Adoption:** While DoH and DoT (focused on privacy/encryption) are seeing rapid uptake, DNSSEC (focused on authentication) has lagged behind.
+* **Complexity:** It relies on a complex chain of keys and certificates, making it difficult to manage.
+* **Privacy vs. Authenticity:** DoH/DoT hide *what* you are browsing from eavesdroppers. DNSSEC simply proves the *site is real*.
+* *Note:* Even with DoH/DoT, the DNS server itself still sees your requests.
+
+
+---
