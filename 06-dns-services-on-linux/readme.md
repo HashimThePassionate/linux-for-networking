@@ -1104,3 +1104,105 @@ Standard Nmap scripts (`ssl-cert.nse`) only verify the *encryption tunnel* (SSL)
 This fills the gap in Nmap's default capabilities for auditing DoH servers.
 
 ---
+
+# 🔒 DNS over TLS (DoT)
+
+## 📘 Overview
+
+**DNS over TLS (DoT)** is the standard DNS protocol, but it is encapsulated within a **Transport Layer Security (TLS)** tunnel.
+
+* **Dedicated Port:** Unlike DoH (which hides inside HTTPS traffic on port 443), DoT uses its own dedicated port: **TCP/853**.
+* **Co-existence:** Because it uses a unique port (853), it does not conflict with standard DNS (UDP/53) or DoH (TCP/443). A single server can easily run all three services simultaneously.
+* **Client Support:** Most modern operating systems support DoT, though it often needs to be manually enabled in settings.
+
+---
+
+## 🛠️ Verification Method 1: Basic Port Scan
+
+The simplest way to check if a server supports DoT is to verify if **Port 853** is open and listening.
+
+**Command:**
+
+```bash
+nmap -p 853 8.8.8.8
+```
+
+**Output Analysis:**
+
+```text
+Starting Nmap 7.80 ( https://nmap.org ) at 2021-02-21 13:33 PST
+Nmap scan report for dns.google (8.8.8.8)
+Host is up (0.023s latency).
+PORT    STATE SERVICE
+853/tcp open  domain-s
+```
+
+* **`853/tcp open`**: The port is accessible.
+* **`domain-s`**: This is the IETF standard name for "DNS over Secure Sockets Layer," confirming the service type.
+
+---
+
+## 🕵️ Verification Method 2: Service Version Detection (`-sV`)
+
+We can try to identify exactly what software or version is running behind that port.
+
+**Command:**
+
+```bash
+nmap -p 853 -sV 8.8.8.8
+```
+
+**Output Analysis:**
+
+```text
+PORT    STATE SERVICE    VERSION
+853/tcp open  ssl/domain (generic dns response: NOTIMP)
+1 service unrecognized despite returning data...
+...
+SF:%r(DNSVersionBindReqTCP...
+SF:ersion\x04bind...
+SF:x04\0\0\0\0\0\0\0\0");
+```
+
+* **"Service Unrecognized":** Nmap (at the time of writing) didn't have a perfect signature match for Google's specific implementation, so it flagged it as unrecognized.
+* **The Clue (`DNSStatusRequestTCP`):** Even though Nmap complained, the "Fingerprint" data (`SF`) contains the string `DNSStatusRequestTCP`. This technical detail proves that the server is indeed responding to DNS commands over that TCP connection. It is a "nice clue" that confirms DoT is active.
+
+---
+
+## 🔐 Verification Method 3: Certificate Inspection
+
+Since DoT uses TLS (just like HTTPS websites), it must have a digital certificate to prove its identity. We can inspect this certificate to ensure we aren't being tricked by a Man-in-the-Middle attacker.
+
+**Command:**
+
+```bash
+nmap -p853 --script ssl-cert 8.8.8.8
+```
+
+**Output Analysis:**
+
+```text
+| ssl-cert: Subject: commonName=dns.google/
+| organizationName=Google LLC/stateOrProvinceName=California/
+| countryName=US
+| Subject Alternative Name: DNS:dns.google, DNS:*.dns.google.com, 
+| IP Address:8.8.8.8, ...
+| Issuer: commonName=GTS CA 1O1 ...
+| Not valid before: 2021-01-26 ...
+| Not valid after: 2021-04-20 ...
+```
+
+* **`Subject: commonName=dns.google`**: Proof that this server is actually Google's DNS.
+* **`Subject Alternative Name`**: Lists all other IPs (like `8.8.4.4` and IPv6 addresses) that are allowed to use this specific certificate.
+* **`Issuer`**: Specifies who signed the certificate (Google Trust Services).
+* **Validity Dates**: Confirms the certificate is currently valid (not expired).
+
+---
+
+## 🧰 The Limitation of `dig` & The Solution (`kdig`)
+
+At the time of writing, the standard Linux `dig` tool **cannot** make DoT queries. It only understands plain DNS (UDP/53).
+
+To actually test DoT functionality (sending a query and getting an answer), we need a different tool called **`kdig`**, which is part of the `knot-dnsutils` package. This tool acts as an "advanced dig" capable of speaking TLS.
+
+---
