@@ -921,3 +921,186 @@ hashim@hashim-server:~$ dig @8.8.8.8 gmail.com mx +short
 * **Logic:** Mail servers try to connect to the server with the **lowest number** (5) first. If that fails, they try the next lowest (10), and so on. This provides failover redundancy.
 
 ---
+
+# 🔒 DNS over HTTPS (DoH)
+
+## 📘 Overview
+
+**DNS over HTTPS (DoH)** is a newer protocol that performs DNS resolution via the HTTPS protocol. Unlike traditional DNS, which uses UDP or TCP on port 53, DoH encapsulates DNS queries within secure HTTP traffic on **port 443**.
+
+**Key Characteristics:**
+
+* **API-Like Structure:** DoH queries and responses look like standard **Application Programming Interface (API)** calls (specifically JSON) rather than raw network packets.
+* **Browser-First Adoption:** This protocol was first supported directly in web browsers (like Chrome and Firefox) before being added to operating systems.
+* **Current Status:** It is now available on most mainstream operating systems, though it is often **not enabled by default**.
+
+---
+
+## 🛠️ Verifying DoH with `curl`
+
+Since DoH uses standard web protocols, we can use the `curl` command (a tool for transferring data with URLs) to interact with a DoH server directly.
+
+### 1️⃣ The Raw Query
+
+In this example, we query the **Cloudflare Public DNS** server (`1.1.1.1`) for the domain `www.coherentsecurity.com`.
+
+**Command:**
+
+```bash
+curl -s -H 'accept: application/dns-json' 'https://1.1.1.1/dns-query?name=www.coherentsecurity.com&type=A'
+```
+
+**Command Breakdown:**
+
+* **`curl`**: The command-line tool.
+* **`-s` (Silent)**: Mutes the progress bar/error messages.
+* **`-H 'accept: application/dns-json'`**: Sends an HTTP Header telling the server, "Please reply with JSON data.".
+* **The URL**:
+* **Protocol**: `https://` (Port 443).
+* **Endpoint**: `/dns-query`.
+* **Parameters**: `?name=...` (The domain to look up) and `&type=A` (Look for an IPv4 address).
+
+
+
+**Output:**
+
+```json
+{"Status":0,"TC":false,"RD":true,"RA":true,"AD":
+false,"CD":false,"Question":[{"name":"www.coherentsecurity.
+com","type":1}],"Answer":[{"name":"www.coherentsecurity.
+com","type":5,"TTL":1693,"data":"robvandenbrink.github.
+io."},{"name":"robvandenbrink.github.io","type":1,
+"TTL":3493,"data":"185.199.108.153"},{"name":"robvandenbrink.
+github.io","type":1,"TTL":3493,"data":"185.199.109.153"},
+{"name":"robvandenbrink.github.io","type":1,"TTL":3493,"data":
+"185.199.110.153"},{"name":"robvandenbrink.github.
+io","type":1,"TTL":3493,"data":"185.199.111.153"}]}
+```
+
+**Analysis:**
+The output is a raw JSON string. It confirms the server received the HTTPS request and returned DNS data, but it is difficult for a human to read.
+
+---
+
+### 2️⃣ Making it Readable with `jq`
+
+To understand the flags and data, we pipe the output into `jq`, a command-line JSON processor.
+
+**Command:**
+
+```bash
+curl -s -H 'accept: application/dns-json' 'https://1.1.1.1/dns-query?name=www.coherentsecurity.com&type=A' | jq
+```
+
+**Output:**
+
+```json
+{
+ "Status": 0,
+ "TC": false,
+ "RD": true,
+ "RA": true,
+ "AD": false,
+ "CD": false,
+ "Question": [
+ {
+ "name": "www.coherentsecurity.com",
+ "type": 1
+ }
+ ],
+ "Answer": [
+ {
+ "name": "www.coherentsecurity.com",
+ "type": 5,
+ "TTL": 1792,
+ "data": "robvandenbrink.github.io."
+ },
+ ….
+ {
+ "name": "robvandenbrink.github.io",
+ "type": 1,
+ "TTL": 3592,
+ "data": "185.199.111.153"
+ }
+ ]
+}
+```
+
+**Detailed Breakdown of Fields:**
+
+* **`Status: 0`**: Success (No Error).
+* **`TC: false` (Truncated)**: The message was not cut off.
+* **`RD: true` (Recursion Desired)**: The client (curl) asked the server to chase down the answer if it didn't know it.
+* **`RA: true` (Recursion Available)**: The server (Cloudflare) confirmed it *is* capable of recursion.
+* **`Question`**: Confirms we asked for an A Record (`type: 1`) for `www.coherentsecurity.com`.
+* **`Answer`**:
+* **Type 5 (CNAME)**: `www.coherentsecurity.com` is an alias for `robvandenbrink.github.io`.
+* **Type 1 (A Record)**: `robvandenbrink.github.io` resolves to the IP `185.199.111.153` (and others).
+
+
+
+---
+
+## 🔍 Verifying the Certificate with Nmap
+
+Since DoH relies on HTTPS, you can use **Nmap** to verify the SSL/TLS certificate of the DoH server. This ensures you are talking to the real provider (e.g., Cloudflare) and not an imposter.
+
+**Command:**
+
+```bash
+nmap -p443 1.1.1.1 --script ssl-cert.nse
+```
+
+**Output:**
+
+```text
+Starting Nmap 7.80 ( https://nmap.org ) at 2021-02-25 11:28
+Eastern Standard Time
+Nmap scan report for one.one.one.one (1.1.1.1)
+Host is up (0.029s latency).
+PORT STATE SERVICE
+443/tcp open https
+| ssl-cert: Subject: commonName=cloudflaredns.com/organizationName=Cloudflare, Inc./
+stateOrProvinceName=California/countryName=US
+| Subject Alternative Name: DNS:cloudflare-dns.com, DNS:*.
+cloudflare-dns.com, DNS:one.one.one.one, IP Address:1.1.1.1,
+IP Address:1.0.0.1, IP Address:162.159.36.1, IP
+Address:162.159.46.1, IP Address:2606:4700:4700:0:0:0:0:1111,
+IP Address:2606:4700:4700:0:0:0:0:1001, IP Address:2606:4700:47
+00:0:0:0:0:64, IP Address:2606:4700:4700:0:0:0:0:6400
+| Issuer: commonName=DigiCert TLS Hybrid ECC SHA384 2020 CA1/
+organizationName=DigiCert Inc/countryName=US
+| Public Key type: unknown
+| Public Key bits: 256
+| Signature Algorithm: ecdsa-with-SHA384
+| Not valid before: 2021-01-11T00:00:00
+| Not valid after: 2022-01-18T23:59:59
+| MD5: fef6 c18c 02d0 1a14 ab75 1275 dd6a bc29
+|_SHA-1: f1b3 8143 b992 6454 97cf 452f 8c1a c842 4979 4282
+Nmap done: 1 IP address (1 host up) scanned in 7.41 seconds
+```
+
+**Output Analysis:**
+
+* **Port 443:** Open (HTTPS service).
+* **Subject:** Confirms the certificate belongs to `cloudflaredns.com` and `Cloudflare, Inc`.
+* **Subject Alternative Name (SANs):** Lists other valid names/IPs for this cert, including `1.1.1.1`, `1.0.0.1`, and IPv6 addresses. This confirms the server identity matches the IP we queried.
+
+---
+
+## 🚀 Advanced: Custom Nmap Scripts for DoH
+
+Standard Nmap scripts (`ssl-cert.nse`) only verify the *encryption tunnel* (SSL), not the actual *DoH service*. To verify that the server is actually answering DNS queries over HTTPS, you can use a custom script.
+
+* **Script Name:** `dns-doh.nse`
+* **Source:** Available on GitHub (`robvandenbrink/dns-doh.nse`).
+* **Function:**
+1. Verifies the port is servicing HTTP.
+2. Constructs the specific query string.
+3. Makes the HTTPS request with the correct headers.
+
+
+
+This fills the gap in Nmap's default capabilities for auditing DoH servers.
+
+---
