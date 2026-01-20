@@ -1,4 +1,37 @@
 # 🌐 The Domain Name System (DNS)
+<details>
+<summary><b>📑 Table of Contents</b></summary>
+
+- [📘 Overview](#-overview)
+- [📚 Chapter Roadmap: What We Will Cover](#-chapter-roadmap-what-we-will-cover)
+  - [🏗️ DNS Fundamentals & Implementation](#️-dns-fundamentals--implementation)
+  - [🔒 Modern Secure DNS Implementations](#-modern-secure-dns-implementations)
+  - [🛡️ DNS Security Extensions (DNSSEC)](#️-dns-security-extensions-dnssec)
+- [🌐 What is DNS?](#-what-is-dns)
+  - [🔄 Reverse Lookup (PTR)](#-reverse-lookup-ptr)
+- [🏢 Two Main DNS Server Implementations](#-two-main-dns-server-implementations)
+  - [🏠 The Organization's Internal DNS](#-the-organizations-internal-dns)
+- [📉 The Journey of a DNS Request](#-the-journey-of-a-dns-request)
+  - [🖼️ Visualizing the Process (Figure 6.1)](#️-visualizing-the-process-figure-61)
+- [⚡ The Power of Caching](#-the-power-of-caching)
+- [⚙️ Configuring DNS Servers: Internal vs. Internet-Facing](#️-configuring-dns-servers-internal-vs-internet-facing)
+  - [📘 Overview](#-overview-1)
+  - [🏢 1. The Internal DNS Server](#-1-the-internal-dns-server)
+  - [🌍 2. The Internet-Facing DNS Server](#-2-the-internet-facing-dns-server)
+- [🛠️ Common DNS Implementations & Building an Internal BIND Server](#️-common-dns-implementations--building-an-internal-bind-server)
+  - [📘 Overview](#-overview-2)
+  - [🏗️ Step-by-Step: Installing & Configuring BIND](#️-step-by-step-installing--configuring-bind)
+- [🌐 BIND: Internet-Facing Implementation Specifics](#-bind-internet-facing-implementation-specifics)
+  - [📘 Overview](#-overview-3)
+  - [⚙️ Configuration Changes](#️-configuration-changes)
+  - [🛠️ Step-by-Step Implementation & Analysis](#️-step-by-step-implementation--analysis)
+- [🔍 DNS Troubleshooting and Reconnaissance](#-dns-troubleshooting-and-reconnaissance)
+  - [📘 Overview](#-overview-4)
+  - [🛠️ Deep Dive: The Full DNS Query (NS Record)](#️-deep-dive-the-full-dns-query-ns-record)
+
+</details>
+
+---
 
 ## 📘 Overview
 
