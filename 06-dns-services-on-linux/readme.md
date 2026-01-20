@@ -734,3 +734,190 @@ hashim@Hashim:~$ dig @10.0.2.15 google.com
 **Conclusion:** The server is now correctly configured as a secure, internet-facing Authoritative DNS server.
 
 ---
+
+# 🔍 DNS Troubleshooting and Reconnaissance
+
+## 📘 Overview
+
+The primary tool in Linux for troubleshooting DNS services is **`dig`** (Domain Information Groper).
+
+* **Availability:** It comes pre-installed on almost all Linux distributions.
+* **Installation:** If it is missing, you can install it using the `dnsutils` package.
+
+**Command:**
+
+```bash
+sudo apt install dnsutils
+```
+
+The usage is straightforward: `dig @<server_ip> <domain_name> <record_type>`.
+
+---
+
+## 🛠️ Deep Dive: The Full DNS Query (`NS` Record)
+
+Let's find the **Name Server (NS)** records for our local domain `hashim.net`. We will query our local server (`10.0.2.15`).
+
+**Command:**
+
+```bash
+hashim@hashim-server:~$ dig @10.0.2.15 hashim.net ns
+```
+
+**Output:**
+
+```text
+; <<>> DiG 9.18.39-0ubuntu0.24.04.2-Ubuntu <<>> @10.0.2.15 hashim.net ns
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 51701
+;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 2
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+; COOKIE: d066135d27c4605301000000696f0bb6cbc3a6f01791e25d (good)
+;; QUESTION SECTION:
+;hashim.net.			IN	NS
+
+;; ANSWER SECTION:
+hashim.net.		604800	IN	NS	ns1.hashim.net.
+
+;; ADDITIONAL SECTION:
+ns1.hashim.net.		604800	IN	A	10.0.2.15
+
+;; Query time: 0 msec
+;; SERVER: 10.0.2.15#53(10.0.2.15) (UDP)
+;; WHEN: Tue Jan 20 04:59:34 UTC 2026
+;; MSG SIZE  rcvd: 101
+```
+
+### 🧐 Detailed Output Analysis
+
+The `dig` output is verbose but extremely valuable. Here is what every section means:
+
+**1. The Header & Status**
+
+* `status: NOERROR`: The query was successful.
+* `id: 51701`: A unique transaction ID to match the request with the response.
+
+**2. The Flags (Crucial for Troubleshooting)**
+
+* `qr` (Query Response): This is a reply, not a question.
+* **`aa` (Authoritative Answer):** This is the most important flag here. It means the server (`10.0.2.15`) **owns** this domain. It is not passing along a rumor; it is the source of truth.
+* `rd` (Recursion Desired): The client asked for recursion.
+* **`WARNING: recursion requested but not available`**: This confirms our configuration from the previous section. We explicitly set `recursion no;`, so the server correctly warned us that it won't perform recursion.
+
+**3. Question Section**
+
+* `;hashim.net. IN NS`: We asked for the **NS** records for `hashim.net`.
+
+**4. Answer Section**
+
+* `hashim.net. 604800 IN NS ns1.hashim.net.`: The server replied: "The name server for this domain is `ns1.hashim.net`."
+* `604800`: This is the **TTL (Time to Live)** in seconds.
+
+**5. Additional Section (Glue Records)**
+
+* `ns1.hashim.net. ... IN A 10.0.2.15`: The server was helpful. It realized that telling you "go to ns1" isn't helpful if you don't know where `ns1` is. So, it provided the IP address for `ns1` (`10.0.2.15`) automatically.
+
+---
+
+## ⚡ The Short Output (`+short`)
+
+Sometimes you don't need the metadata; you just want the answer. We use the `+short` parameter for this.
+
+### 1. Local Query (Hashim.net)
+
+**Command:**
+
+```bash
+hashim@hashim-server:~$ dig @10.0.2.15 hashim.net ns +short
+```
+
+**Output:**
+
+```text
+ns1.hashim.net.
+```
+
+* **Result:** Simple and clean.
+
+### 2. External Query (Google.com)
+
+Now let's ask a public DNS server (`8.8.8.8`) for Google's name servers.
+
+**Command:**
+
+```bash
+hashim@hashim-server:~$ dig @8.8.8.8 google.com ns +short
+```
+
+**Output:**
+
+```text
+ns3.google.com.
+ns4.google.com.
+ns1.google.com.
+ns2.google.com.
+```
+
+* **Result:** Google has multiple redundant name servers (ns1-ns4) for reliability.
+
+---
+
+## 📧 Mail Exchanger (`MX`) Queries
+
+The `dig` command can query any record type. To find out which servers handle email for a domain, we look up the **MX** record.
+
+### 1. Querying Local Server for MX (Hashim.net)
+
+**Command:**
+
+```bash
+hashim@hashim-server:~$ dig @10.0.2.15 hashim.net mx +short
+```
+
+**Output:**
+*(Empty)*
+
+* **Reason:** We never added an MX record to our `hashim.net.zone` file in the previous configuration steps! The server correctly returns nothing because no record exists.
+
+### 2. Querying Local Server for External MX (Google.com)
+
+**Command:**
+
+```bash
+hashim@hashim-server:~$ dig @10.0.2.15 google.com mx +short
+```
+
+**Output:**
+*(Empty)*
+
+* **Reason:** Our server has `recursion no;` enabled. It cannot go out to the internet to find Google's mail servers, so it refuses to answer or returns nothing.
+
+### 3. Querying Public Server for Gmail MX
+
+Let's ask Google (`8.8.8.8`) about Gmail's mail servers.
+
+**Command:**
+
+```bash
+hashim@hashim-server:~$ dig @8.8.8.8 gmail.com mx +short
+```
+
+**Output:**
+
+```text
+20 alt2.gmail-smtp-in.l.google.com.
+40 alt4.gmail-smtp-in.l.google.com.
+30 alt3.gmail-smtp-in.l.google.com.
+10 alt1.gmail-smtp-in.l.google.com.
+5 gmail-smtp-in.l.google.com.
+```
+
+* **Result:** The numbers (5, 10, 20...) are **Priorities**.
+* **Logic:** Mail servers try to connect to the server with the **lowest number** (5) first. If that fails, they try the next lowest (10), and so on. This provides failover redundancy.
+
+---
