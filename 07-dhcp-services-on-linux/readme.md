@@ -82,3 +82,71 @@ We can see this exact exchange in a packet capture. Below is a detailed explanat
 3. **Port Usage (From Figure 7.1):**
 * **Client:** Listens/Sends on UDP Port **68**.
 * **Server:** Listens/Sends on UDP Port **67**.
+
+---
+
+# 🌐 DHCP Requests from Other Subnets (Forwarders & Relays)
+
+## 📘 The Problem: Broadcast Isolation
+
+In most corporate networks, servers and workstations are separated into different VLANs or subnets for security and organization.
+
+* **Workstations:** Vlan 10 (`192.168.10.x`)
+* **Servers (inc. DHCP):** Vlan 20 (`192.168.20.x`)
+
+**The Conflict:** The DHCP DORA sequence relies on **Broadcasts** (Destination `255.255.255.255`). By design, routers and switches **do not forward broadcast traffic** from one subnet to another. If they did, the entire internet would flood with noise.
+
+* **Result:** The client yells "Is anyone there?" (Discover), but the DHCP server never hears it because the router blocks the shout.
+
+---
+
+## 🛠️ The Solution: DHCP Relay (IP Helper)
+
+To fix this, we place a **DHCP Forwarder** (also called a Relay or Helper) on the network segment where the clients are.
+
+* **Who is the Relay?** Almost always, this role is performed by the **Router** or **Layer 3 Switch** that acts as the client's Default Gateway.
+* **Why the Router?** Since the router has a "leg" in the client's subnet and a path to the server's subnet, it is the perfect bridge.
+
+### 🔄 How the Relay Works (Figure 7.3)
+
+The relay converts the local broadcast into a targeted message.
+
+1. **Client Broadcasts:** The client sends a normal `DHCP DISCOVER` (Broadcast) to the local network.
+2. **Relay Intercepts:** The Router (configured as a Relay) hears this broadcast. Instead of dropping it, it captures it.
+3. **Unicast Conversion:** The Router wraps the DHCP message in a new IP packet.
+* **Source:** The Router's Interface IP (e.g., `192.168.10.1`).
+* **Destination:** The specific IP of the remote DHCP Server (e.g., `10.10.10.10`).
+
+
+4. **Forwarding:** The Router sends this **Unicast** packet directly to the server.
+5. **Server Reply:** The server replies to the Router (Unicast).
+6. **Broadcast Reply:** The Router receives the reply, strips the unicast headers, and broadcasts the `DHCP OFFER` back onto the local segment for the client to hear.
+
+---
+
+## ⚙️ Cisco Implementation
+
+On Cisco devices, this feature is called an "IP Helper Address." It is applied to the interface facing the *clients*.
+
+**Command:**
+
+```cisco
+interface VLAN <Client_VLAN_ID>
+ ip helper-address 10.10.10.10
+```
+
+**Explanation:**
+
+* **`interface VLAN ...`**: Selects the interface where the clients live.
+* **`ip helper-address 10.10.10.10`**: Tells the router, "If you see a broadcast on this interface (like DHCP), grab it and forward it directly to the server at `10.10.10.10`."
+
+---
+
+## 📦 Packet Analysis: What Changes?
+
+The text clarifies an important technical detail about how the packets change during this process.
+
+* **Layer 3 (IP Headers):** These change significantly. Between the Client and Router, it is Broadcast (`255.255.255.255`). Between the Router and Server, it is Unicast (Real IPs).
+* **Layer 7 (DHCP Payload):** The actual DHCP data inside the packet remains mostly unchanged. The DHCP protocol fields still contain the original **Client MAC Address** so the server knows who the lease is for.
+
+---
