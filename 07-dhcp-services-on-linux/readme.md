@@ -213,3 +213,112 @@ If a device (like a phone) gets an IP address but fails to register or download 
 * **Diagnosis:** If the client requests Option 156 but the server sends Option 66, the phone will ignore it. You must configure the server to match exactly what the client is asking for.
 
 ---
+
+# 🔒 Securing DHCP Services
+
+## 📘 Overview
+
+Securing DHCP is unique because the defense strategy rarely happens on the DHCP server itself. Since the DHCP protocol is designed to be open and "automagical" (allowing any device to plug in and get an IP), adding authentication or encryption directly to the protocol adds too much complexity.
+
+Instead, the security burden falls on the **Network Switches**. We must control the "topology" of trust—defining *where* legitimate DHCP answers are allowed to come from.
+
+---
+
+## 🚨 Threat 1: The Rogue DHCP Server
+
+This is the most common DHCP issue. It can be accidental or malicious.
+
+### 1. The Accidental Rogue (Home Router Scenario)
+
+* **Scenario:** An employee brings a Wi-Fi router from home and plugs it into the corporate network to get better signal.
+* **The Problem:** The home router has its own DHCP server enabled (usually `192.168.1.x`). It starts racing the corporate server to answer DHCP requests.
+* **The Impact:** Corporate workstations receive "home" IP addresses. They lose access to corporate file servers, printers, and the internet because they are on the wrong subnet.
+
+### 2. The Malicious Rogue (Layer 3 MITM)
+
+An attacker can intentionally set up a Rogue DHCP server to intercept traffic. This is a **Machine-in-the-Middle (MiTM)** attack.
+
+* **Mechanism:** The attacker sets up a DHCP server that assigns the **Attacker's IP** as the **Default Gateway**.
+* **The Flow (Figure 7.4):**
+1. The **Malicious DHCP Server** answers the client's request *faster* than the legitimate server.
+2. The Client sends all its traffic to the Attacker (thinking it is the Router).
+3. The Attacker inspects/modifies the traffic and then forwards it to the real router so the user doesn't notice the interruption.
+
+
+
+### 3. The WPAD Attack (Option 252)
+
+This is a more sophisticated attack targeting web traffic specifically.
+
+* **Mechanism:** The attacker uses **DHCP Option 252**. This option tells clients where to find a **Proxy Auto-Configuration (PAC)** file (e.g., `http://attacker.com/proxy.pac`).
+* **The Flow (Figure 7.5):**
+1. The **Malicious DHCP Server** wins the race and sends Option 252.
+2. The Client downloads the malicious PAC file.
+3. The Client sends its web traffic to the **Malicious Proxy Server** defined in the file.
+4. The Attacker steals credentials (like banking logins) via fake websites before forwarding the traffic.
+
+
+
+---
+
+## 🛡️ The Defense: DHCP Snooping
+
+The industry-standard defense against Rogue DHCP servers is **DHCP Snooping**. This feature turns the switch into a security guard that inspects DHCP packets.
+
+### How it Works
+
+1. **Untrusted Ports (Default):** All user-facing ports are considered "Untrusted." They are allowed to send DHCP Requests (asking for an IP), but if they try to send a **DHCP Offer** (giving an IP), the switch blocks the packet and shuts down the port.
+2. **Trusted Ports:** We explicitly tell the switch which ports connect to legitimate DHCP servers (usually the **Uplink** ports connecting to the core network).
+
+### ⚙️ Configuration (Cisco Example)
+
+We enable snooping globally for specific VLANs, then trust the uplink.
+
+```cisco
+! Enable snooping for VLANs 1, 2, and 10
+ip dhcp snooping vlan 1 2 10
+
+! Configure the Uplink (Connection to Server)
+interface e1/48
+ ip dhcp snooping trust
+```
+
+### ⚙️ Configuration (HP/Aruba Example)
+
+Some vendors allow you to trust the **Server IP Address** instead of just the port. This is easier to manage because you can copy/paste the same config to every switch without worrying about which specific port is the uplink.
+
+```bash
+dhcp-snooping
+dhcp-snooping vlan 1 2 10
+dhcp-snooping authorized-server <Legitimate_DHCP_IP>
+```
+
+### 🏢 Data Center Strategy
+
+In the server room (where the actual DHCP server lives, likely as a Virtual Machine), we have two choices:
+
+1. **Trust the Uplinks:** Configure snooping on the server switches, trusting the ports connecting to the Hypervisors.
+2. **Physical Security:** Skip snooping in the data center entirely. Rely on the fact that the server cabinets are physically locked and only authorized admins can create VMs. This is the most common approach to reduce complexity.
+
+---
+
+## 🚨 Threat 2: The Rogue DHCP Client
+
+This is when an unauthorized device (like a hacker's laptop or a "pwnplug") plugs into an open wall jack to get onto the network.
+
+### 🚫 The Old Defense: Static MAC Filtering
+
+* **Method:** Maintain a giant database of every allowed MAC address in the company. Manually approve every new laptop.
+* **Why it fails:** It is an administrative nightmare. Nobody wants to manually register every new device.
+
+### ✅ The Modern Defense: 802.1x Authentication
+
+* **Method:** The network port itself is locked. When a device plugs in, it must prove its identity before the switch allows any traffic (including DHCP).
+* **Technology:** Uses **RADIUS** and **Certificates**.
+* The Client presents a Certificate.
+* The RADIUS server validates it.
+* If trusted, the switch port unlocks.
+*(This topic is covered deeply in Chapters 8 and 9 of the text).*
+
+
+---
