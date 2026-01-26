@@ -150,3 +150,66 @@ The text clarifies an important technical detail about how the packets change du
 * **Layer 7 (DHCP Payload):** The actual DHCP data inside the packet remains mostly unchanged. The DHCP protocol fields still contain the original **Client MAC Address** so the server knows who the lease is for.
 
 ---
+
+# ⚙️ DHCP Options
+
+## 📘 Overview
+
+While the primary job of DHCP is to assign an IP address, its power extends far beyond that. **DHCP Options** allow the server to deliver specialized configuration parameters to devices during the boot process.
+
+* **How it works:** When a client sends a `DISCOVER` packet, it includes a "Parameter Request List." This is the client saying, "I know how to handle these specific settings; please send them if you have them."
+* **The Server's Role:** In the `OFFER` packet, the server tries to fill in as many of these requested details as possible.
+
+### 📋 Common Options (The Basics)
+
+Every standard workstation (PC/Laptop) requests these four core options:
+
+1. **Subnet Mask** (Option 1)
+2. **Router / Default Gateway** (Option 3)
+3. **DNS Server List** (Option 6)
+4. **DNS Domain Name** (Option 15)
+
+---
+
+## 📞 Advanced Usage: VoIP Phones & Special Devices
+
+In corporate networks, devices like **VoIP Phones**, **Wireless Access Points (WAPs)**, and **PXE Boot** clients need more than just an IP address. They need to know *how* to function.
+
+* **VoIP Phones:** Need to know the IP of the phone system (PBX) and where to download their configuration files (TFTP/HTTP server).
+* **Wireless Access Points:** Need to find their central Wireless Controller.
+* **PXE Clients:** Need to find a boot image to load an operating system over the network.
+
+### 🏭 Vendor-Specific VoIP Options
+
+Different phone manufacturers use different DHCP Option numbers to deliver this information. Below is a breakdown of common vendor requirements:
+
+Fine. The table you pasted was trying very hard and still failed basic Markdown hygiene. Here’s a **clean, properly formatted Markdown table** that will actually render correctly instead of embarrassing you in front of GitHub or a wiki.
+
+---
+
+### 🏭 Vendor-Specific VoIP DHCP Options
+
+| Vendor       | Option # | Function                                 | Syntax / Notes                                                |
+| ------------ | -------- | ---------------------------------------- | ------------------------------------------------------------- |
+| **Cisco**    | **150** or **66**  | Points to TFTP Server IP                 | Can list **multiple IP addresses**                            |                             |
+| **Avaya**    | **176**  | VLAN & File Server config (older phones) | `MCIPADD=<pbx_ip>,MCPORT=1719,TFTPSRVR=<tftp_server>`         |
+|              | **242**  | VLAN & File Server config (newer phones) | Same syntax as Option 176                                     |
+| **Mitel**    | **156**  | Server IPs & VLAN tagging                | `ftpservers=<IP>,configservers=<IP>,layer2tagging=1,vlanid=x` |
+| **Shoretel** | **156**  | Server config (vendor-specific format)   | `ftpservers=ip_address,country=n,language=n...`               |
+
+---
+
+> **Note:** Even though Mitel and Shoretel both use **Option 156**, the *syntax* (the format of the text inside the option) is different.
+
+---
+
+## 🔍 Troubleshooting DHCP Options
+
+If a device (like a phone) gets an IP address but fails to register or download its config, the issue is often a missing or incorrect DHCP Option.
+
+**The Golden Rule:** Always look at the **DHCP DISCOVER** packet (the first packet in the DORA sequence).
+
+* **Why?** This packet contains the *client's* specific request list.
+* **Diagnosis:** If the client requests Option 156 but the server sends Option 66, the phone will ignore it. You must configure the server to match exactly what the client is asking for.
+
+---
