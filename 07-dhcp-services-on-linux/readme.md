@@ -322,3 +322,161 @@ This is when an unauthorized device (like a hacker's laptop or a "pwnplug") plug
 
 
 ---
+
+# 🛠️ Installing and Configuring a DHCP Server
+
+This guide details the process of setting up an **ISC DHCP Server** on Linux. We will cover the installation, global configuration, scope definition, and service verification.
+
+---
+
+## 📦 Step 1: Installation
+
+We begin by installing the industry-standard DHCP server package using `apt`.
+
+**Command:**
+
+```bash
+hashim@hashim-server:~$ sudo apt-get install isc-dhcp-server
+```
+
+* **`sudo`**: Runs the command with administrative privileges.
+* **`apt-get install`**: The package manager command to download and install software.
+* **`isc-dhcp-server`**: The specific package name for the Internet Systems Consortium DHCP server.
+
+---
+
+## ⚙️ Step 2: Basic Global Configuration
+
+Once installed, we configure the global options in the main configuration file: `/etc/dhcp/dhcpd.conf`. These settings apply to the entire server unless overridden by a specific scope.
+
+**Command:**
+
+```bash
+hashim@hashim-server:~$ sudo nano /etc/dhcp/dhcpd.conf
+```
+
+### 1. Global Parameters
+
+Add or modify the following lines at the top of the file:
+
+```nginx
+default-lease-time 3600;
+max-lease-time 7200;
+ping-check true;
+ping-timeout 2;
+option domain-name-servers 10.0.2.15;
+```
+
+**Explanation of Settings:**
+
+* **Lease Times (`default-lease-time` / `max-lease-time`):**
+* These variables determine how long an IP address belongs to a client before it expires.
+* **Why it matters:**
+* **Incident Response:** Longer leases (e.g., 3-4 days) are preferred for internal networks. They ensure a specific IP stays associated with a specific user for a predictable time, making log analysis easier during investigations.
+* **Guest Networks:** Shorter leases are better for guest Wi-Fi to prevent running out of IP addresses as transient users come and go.
+
+
+* **Renewal:** Clients attempt to renew their lease when **50%** of the time has passed.
+
+
+* **Ping Check (`ping-check true`):**
+* This is a critical safety feature. Before the server assigns an IP to a client, it pings that IP address.
+* **Goal:** To prevent **Duplicate IP Addresses**. If the ping gets a reply, the server knows someone else (perhaps with a static IP) is using that address and will not assign it.
+* **Timeout:** We increased the `ping-timeout` to **2 seconds** (default is 1 second) to be safe.
+
+
+* **DNS Servers (`option domain-name-servers`):**
+* Defines the central DNS server (`10.0.2.15`) that all clients should use.
+
+
+
+### 2. The Authoritative Directive
+
+Further down in the file, you must uncomment this line:
+
+```nginx
+authoritative;
+```
+
+* **Meaning:** This tells the network, "I am the official DHCP server for this network." If a client requests an IP that is invalid for this segment, an authoritative server can explicitly deny it (sending a DHCPNAK), forcing the client to request a new, valid IP immediately.
+
+---
+
+## 🌐 Step 3: Defining the Scope (Subnet)
+
+We must define the network range (subnet) we want to manage. Add this block to the end of `/etc/dhcp/dhcpd.conf`:
+
+```nginx
+# Specify the network address and subnet-mask
+subnet 10.0.2.0 netmask 255.255.255.0 {
+  # Specify the default gateway address
+  option routers 10.0.2.1;
+  # Specify the subnet-mask
+  option subnet-mask 255.255.255.0;
+  # Specify the range of leased IP addresses
+  range 10.0.2.50 10.0.2.100;
+}
+```
+
+**Explanation of Settings:**
+
+* **`subnet 10.0.2.0`**: Defines the network ID.
+* **Network Selection Advice:** The text advises **avoiding** `192.168.0.0/24` or `192.168.1.0/24` for corporate networks. Since most home networks use these IPs, remote users connecting via VPN might face routing conflicts (two identical networks).
+* **`option routers`**: This is the **Default Gateway** (`10.0.2.1`) that clients will use to reach the internet.
+* **`range 10.0.2.50 10.0.2.100`**: The **Pool** of addresses. The server will hand out IPs starting from `.50` up to `.100`.
+
+---
+
+## 🚀 Step 4: Restart and Verification
+
+Finally, we apply the configuration and verify the service is running.
+
+**1. Restart the Service**
+
+```bash
+hashim@hashim-server:~$ sudo systemctl restart isc-dhcp-server.service
+```
+
+**2. Check Service Status**
+
+```bash
+hashim@hashim-server:~$ sudo systemctl status isc-dhcp-server.service
+```
+
+**Output Analysis:**
+
+```text
+● isc-dhcp-server.service - ISC DHCP IPv4 server
+     Loaded: loaded (/usr/lib/systemd/system/isc-dhcp-server.service; enabled; preset: enabled)
+     Active: active (running) since Mon 2026-01-26 06:15:30 UTC; 5s ago
+       Docs: man:dhcpd(8)
+   Main PID: 6890 (dhcpd)
+      Tasks: 1 (limit: 9198)
+     Memory: 4.8M (peak: 5.2M)
+        CPU: 12ms
+     CGroup: /system.slice/isc-dhcp-server.service
+             └─6890 dhcpd -user dhcpd -group dhcpd -f -4 -pf /run/dhcp-server/dhcpd.pid -cf /etc/dhcp/dhcpd.conf
+```
+
+* **`Loaded: loaded`**: The service configuration file exists and is recognized by the system.
+* **`Active: active (running)`**: **Success!** The server is up and running correctly. The timestamp (`since Mon...`) shows it started 5 seconds ago.
+* **`Main PID: 6890`**: The Process ID. This is the specific number the operating system uses to identify the running DHCP program.
+* **`CGroup`**: Shows the exact command used to launch the daemon (`/usr/sbin/dhcpd`), pointing to the config file we just edited (`-cf /etc/dhcp/dhcpd.conf`).
+
+---
+
+## ➕ Optional: Dynamic DNS Integration
+
+If you want clients to automatically update their DNS records when they get an IP, you can add these lines to the configuration:
+
+```nginx
+ddns-update-style interim;
+# If you have fixed-address entries you want to use dynamic dns
+update-static-leases on;
+```
+
+* **`ddns-update-style interim`**: Enables the interaction between DHCP and DNS.
+* **`update-static-leases on`**: Ensures that even devices with fixed (static) IPs get their DNS names updated automatically.
+
+
+---
