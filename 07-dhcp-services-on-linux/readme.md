@@ -4,6 +4,49 @@
 
 **DHCP (Dynamic Host Configuration Protocol)** is a system that allows network administrators to centrally manage and automate the network configuration of devices.
 
+<details>
+<summary><strong>📑 Table of Contents</strong></summary>
+
+1. [The DORA Sequence](#-the-dora-sequence)
+   - [Discover](#1️⃣-discover-client---server)
+   - [Offer](#2️⃣-offer-server---client)
+   - [Request](#3️⃣-request-client---server)
+   - [Acknowledgment](#4️⃣-acknowledgment-server---client)
+
+2. [Analyzing the Traffic (Wireshark)](#-analyzing-the-traffic-wireshark)
+
+3. [DHCP Requests from Other Subnets](#-dhcp-requests-from-other-subnets-forwarders--relays)
+   - [DHCP Relay (IP Helper)](#-the-solution-dhcp-relay-ip-helper)
+   - [Cisco Implementation](#-cisco-implementation)
+   - [Packet Analysis](#-packet-analysis-what-changes)
+
+4. [DHCP Options](#-dhcp-options)
+   - [Common Options](#-common-options-the-basics)
+   - [VoIP & Special Devices](#-advanced-usage-voip-phones--special-devices)
+   - [Vendor-Specific Options](#-vendor-specific-voip-dhcp-options)
+   - [Troubleshooting](#-troubleshooting-dhcp-options)
+
+5. [Securing DHCP Services](#-securing-dhcp-services)
+   - [Threat 1: Rogue DHCP Server](#-threat-1-the-rogue-dhcp-server)
+   - [DHCP Snooping](#-the-defense-dhcp-snooping)
+   - [Threat 2: Rogue DHCP Client](#-threat-2-the-rogue-dhcp-client)
+
+6. [Installing and Configuring](#-installing-and-configuring-a-dhcp-server)
+   - [Installation](#-step-1-installation)
+   - [Global Configuration](#-step-2-basic-global-configuration)
+   - [Defining Scope](#-step-3-defining-the-scope-subnet)
+   - [Restart & Verification](#-step-4-restart-and-verification)
+   - [Dynamic DNS Integration](#-optional-dynamic-dns-integration)
+
+7. [Static Reservations & Troubleshooting](#-static-reservations--troubleshooting-dhcp)
+   - [Static Reservations](#1-static-reservations-fixed-ips)
+   - [DHCP Troubleshooting](#2-dhcp-troubleshooting--lease-management)
+   - [Log Analysis](#3-deep-dive-dhcp-log-analysis)
+
+</details>
+
+</br>
+
 * **The Problem:** Without DHCP, an administrator would have to manually type in the IP address, Subnet Mask, Gateway, and DNS server for every single computer, printer, and phone in the building (Static IP).
 * **The Solution:** DHCP allows devices to request these settings automatically when they turn on. The DHCP server holds a pool of addresses and assigns them to devices as needed.
 
