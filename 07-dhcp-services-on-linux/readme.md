@@ -480,3 +480,185 @@ update-static-leases on;
 
 
 ---
+
+
+# 📌 Static Reservations & Troubleshooting DHCP
+
+## 1. Static Reservations (Fixed IPs)
+
+Sometimes you need a specific device (like a printer or server) to always have the exact same IP address. This is called a **Static Reservation**. Instead of configuring the static IP on the device itself (which is hard to track), we configure the DHCP server to always give that device the same IP based on its MAC address.
+
+### 🔹 Basic Fixed Address
+
+To assign a permanent IP to a device, we edit `/etc/dhcp/dhcpd.conf` and add a `host` block.
+
+**Configuration:**
+
+```nginx
+host PrtAccounting01 {
+ hardware ethernet 08:00:27:bd:14:9a;
+ fixed-address 10.0.2.49;
+}
+```
+
+* **`hardware ethernet`**: The MAC address of the device.
+* **`fixed-address`**: The specific IP (`10.0.2.49`) the server will *always* assign to this MAC.
+
+### 🔹 Roaming/Wireless Reservations
+
+Sometimes you don't care about the IP address (because the device moves between subnets), but you **do** care about its Hostname and DNS settings. This config ensures the device always registers with the correct name in your DNS system.
+
+**Configuration:**
+
+```nginx
+host LTOP-0786 {
+ hardware ethernet 08:00:27:15:57:1D;
+ option host-name "LTOP-0786";
+ option domain-name "hashim.net";
+ ddns-hostname "LTOP-786";
+ ddns-domain-name "hashim.net";
+}
+```
+
+* **Note:** There is no `fixed-address` line. The IP is dynamic, but the **DNS names** are enforced.
+
+### 🔹 Grouping Hosts
+
+To avoid typing the same settings (like domain name) over and over, you can group hosts together.
+
+**Configuration:**
+
+```nginx
+group {
+ option domain-name "hashim.net";
+ ddns-domainname "hashim";
+
+ host PrtAccounting01 {
+   hardware ethernet 08:00:27:72:48:e4;
+   fixed-address 10.0.2.10;
+ }
+ host PrtCafe01 {
+   hardware ethernet 08:00:27:1c:ac:12;
+   fixed-address 10.0.2.9;
+ }
+}
+```
+
+* Everything inside `group { ... }` automatically inherits the domain settings at the top.
+
+---
+
+## 2. DHCP Troubleshooting & Lease Management
+
+Now that the server is running, we need tools to see who is on the network and troubleshoot issues.
+
+### 📋 Viewing Active Leases
+
+To see which devices currently have an IP address, use `dhcp-lease-list`.
+
+**Command:**
+
+```bash
+hashim@hashim-server:~$ dhcp-lease-list
+```
+
+**Output:**
+
+```text
+Reading leases from /var/lib/dhcp/dhcpd.leases
+MAC                IP              hostname       valid until         manufacturer
+==================================================================================
+08:00:27:6b:c1:39  10.0.2.161      -NA-           2026-01-26 14:53:26 PCS Systemtechnik GmbH
+```
+
+* **MAC / IP**: Identifies the device.
+* **Manufacturer (OUI)**: The command automatically translates the first half of the MAC address into a Vendor Name (e.g., `PCS Systemtechnik GmbH`).
+* **Why this is useful:** It helps you spot "oddball" devices. For example, if you see an Apple manufacturer on a network that should only have Windows PCs, or an unknown vendor on a VoIP voice VLAN, you can investigate immediately.
+
+
+
+### 🛠️ Harvesting Data (Scripting)
+
+If you want to extract just the MAC addresses and Hostnames to a text file (e.g., for inventory), you can pipeline the command.
+
+**Command:**
+
+```bash
+hashim@hashim-server:~$ dhcp-lease-list | sed -n '3,$p' | tr -s " " | cut -d " " -f 1,3 > output.txt
+```
+
+**Detailed Breakdown:**
+
+1. **`dhcp-lease-list`**: Generates the full list.
+2. **`sed -n '3,$p'`**: Skips the first 2 lines (headers) and prints from line 3 to the end.
+3. **`tr -s " "`**: "Squeeze" spaces. It turns multiple spaces into a single space character (crucial for the next step).
+4. **`cut -d " " -f 1,3`**: Uses the space as a delimiter and cuts out Field 1 (MAC) and Field 3 (Hostname).
+5. **`> output.txt`**: Saves the result to a file.
+
+---
+
+## 3. Deep Dive: DHCP Log Analysis
+
+If `dhcp-lease-list` isn't enough (e.g., you need to investigate an issue from yesterday), you must look at the logs in `/var/log/dhcpd.log`.
+
+### 🔍 Viewing the DORA Sequence
+
+To see the full conversation between a client and server, `grep` for the client's MAC address.
+
+**Command:**
+
+```bash
+hashim@hashim-server:~$ cat dhcpd.log | grep 08:00:27:6b:c1:39 | grep "Jan 26" | more
+```
+
+**Output:**
+
+```text
+Jan 26 13:54:15 hashim-server dhcpd: DHCPDISCOVER from 08:00:27:6b:c1:39 via enp0s3
+Jan 26 13:54:16 hashim-server dhcpd: DHCPOFFER on 10.0.2.113 to 08:00:27:6b:c1:39 via enp0s3
+Jan 26 13:54:16 hashim-server dhcpd: DHCPREQUEST for 10.0.2.113 (10.0.2.1) from 08:00:27:6b:c1:39 via enp0s3
+Jan 26 13:54:16 hashim-server dhcpd: DHCPACK on 10.0.2.113 to 08:00:27:6b:c1:39 via enp0s3
+```
+
+* **Explanation**: This shows a perfect, healthy handshake. The client asked (Discover), Server offered (Offer), Client accepted (Request), and Server confirmed (Ack).
+
+### 🕵️ "Who had this IP?"
+
+If you see suspicious traffic coming from `10.0.2.113` in your firewall logs, you need to know **which device** had that IP at that time. We filter for `DHCPACK` (the final confirmation).
+
+**Command:**
+
+```bash
+hashim@hashim-server:~$ cat /var/log/dhcpd.log | grep 10.0.2.113 | grep DHCPACK | grep "Jan 26"
+```
+
+**Output:**
+
+```text
+Jan 26 13:54:16 hashim-server dhcpd: DHCPACK on 10.0.2.113 to 08:00:27:6b:c1:39 via enp0s3
+Jan 26 16:43:29 hashim-server dhcpd: DHCPACK on 10.0.2.113 to 08:00:27:6b:c1:39 via enp0s3
+...
+```
+
+* **Result**: We see that MAC `08:00:27:6b:c1:39` held this IP multiple times throughout the day.
+
+### 🧹 Extracting Unique MACs
+
+To get a clean list of **only** the unique MAC addresses that held that IP on that day:
+
+**Command:**
+
+```bash
+hashim@hashim-server:~$ cat dhcpd.log | grep 10.0.2.113 | grep DHCPACK | grep "Jan 26" | cut -d " " -f 10 | sort | uniq
+```
+
+**Output:**
+
+```text
+08:00:27:6b:c1:39
+```
+
+* **Analysis**: Only one device used this IP on Jan 26. If multiple devices had churned through that IP, you would see multiple MAC addresses here.
+
+
+---
