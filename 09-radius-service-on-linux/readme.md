@@ -52,3 +52,69 @@ The **Code field** is the first part of the packet and determines its function. 
 
 
 ---
+
+# 📡 RADIUS Packet Analysis: The Authentication Exchange
+
+## 📘 Overview
+
+Now that we understand the structure of a RADIUS packet (Codes, IDs, Authenticators), let's analyze a real-world authentication attempt. This exchange involves a client sending credentials and the server replying with a definitive "Yes" or "No."
+
+---
+
+## 📤 1. The Access-Request (Figure 9.1)
+
+The process begins when the NAS (Network Access Server) sends an **Access-Request (Code 1)** to the RADIUS server.
+
+### Key Packet Details:
+
+* **Packet ID (0x2):** This number (2) is crucial. The server *must* reply with the exact same ID so the NAS knows which user the answer is for.
+* **Authenticator:** A unique random string generated for this specific session.
+
+### Attribute Value Pairs (AVPs):
+
+* **User-Name:** Sent in **Clear Text** (e.g., "robv"). Anyone capturing the traffic can see the username.
+* **User-Password:** Labeled as "Encrypted," but technically, it is an **MD5 Hash**.
+* **How it works:** The password is NOT sent in plain text. It is hashed using a combination of:
+1. The Password text.
+2. The **Shared Secret** (only known to the NAS and Server).
+3. The **Request Authenticator**.
+
+
+* **Security Note:** This prevents an eavesdropper from easily reading the password, but since it uses MD5 (an older hashing algorithm), it is considered weak by modern standards unless wrapped in a stronger protocol (like TLS).
+
+
+
+---
+
+## 📥 2. The Response: Accept or Reject
+
+The server processes the request and sends a reply. The **Packet Code** tells us the verdict.
+
+### Scenario A: Access-Accept (Figure 9.2)
+
+If the username and password are correct, the server sends **Code 2**.
+
+* **Code:** `Access-Accept (2)`.
+* **Packet Identifier:** `0x2`. It matches the request's ID exactly, confirming this is the answer for "robv".
+* **Response Authenticator:** This is a calculated MD5 checksum. The NAS uses this to verify that the reply actually came from the real RADIUS server and not an imposter. It is calculated using the Code, ID, Length, Request Authenticator, and the **Shared Secret**.
+
+### Scenario B: Access-Reject (Figure 9.3)
+
+If the credentials are wrong (or the user is not allowed), the server sends **Code 3**.
+
+* **Code:** `Access-Reject (3)`.
+* **Packet Identifier:** Matches the request ID (In this specific screenshot, it is `0x3`, indicating it belongs to a different session than the example above).
+* **Outcome:** The user is denied access. This usually happens due to a typo in the password or a disabled account.
+
+---
+
+## 🔑 Summary of the Security Mechanism
+
+The security of this simple RADIUS exchange relies entirely on the **Shared Secret**.
+
+1. **Request:** The client proves it knows the secret by hashing the password with it.
+2. **Response:** The server proves it is legitimate by hashing the response authenticator with it.
+3. **Result:** If the Shared Secret is compromised, an attacker can decrypt passwords and spoof server responses.
+
+
+---
