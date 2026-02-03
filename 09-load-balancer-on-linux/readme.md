@@ -1,15 +1,31 @@
 
 # 🛡️ Enterprise HAProxy Load Balancer Setup Guide
 
+<details>
+<summary><strong>📋 Table of Contents</strong></summary>
+
+1. [📖 Project Overview](#-1-project-overview)
+2. [🏗️ Infrastructure Design](#️-2-infrastructure-design-network-architecture)
+   - [The 3 Virtual Machines](#the-3-virtual-machines)
+3. [⚙️ Step-by-Step Implementation](#️-3-step-by-step-implementation)
+   - [Phase 1: Network Configuration](#phase-1-network-configuration-netplan)
+   - [Phase 2: Web Server Preparation](#phase-2-web-server-preparation)
+   - [Phase 3: Load Balancer Kernel Tuning](#phase-3-load-balancer-kernel-tuning-)
+   - [Phase 4: Installing & Configuring HAProxy](#phase-4-installing--configuring-haproxy-)
+4. [🧪 Testing & Verification](#-4-testing--verification)
+5. [🔒 Security Summary](#-5-security-summary)
+6. [🎓 Conclusion](#-conclusion)
+
+</details>
+
 **Project:** High Availability Web Infrastructure on Linux
-
 **Author:** Hashim
-
 **Date:** February 2026
-
 **Environment:** Ubuntu 24.04 (VirtualBox)
-
 **HAProxy Version:** 2.8+
+
+---
+
 
 ## 📖 1. Project Overview
 
@@ -125,10 +141,65 @@ sudo systemctl restart apache2
 
 3. **Create Unique Identity Pages:**
 To visually test load balancing, we made each server say its name.
-* **On Web-01:** `echo "<h1>I am Web Server 01</h1>" | sudo tee /var/www/html/index.html`
-* **On Web-02:** `echo "<h1>I am Web Server 02</h1>" | sudo tee /var/www/html/index.html`
+* **On Web-01:** 
+```
+sudo tee /var/www/html/index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Portal</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; border-top: 5px solid #3498db; }
+        h1 { color: #2c3e50; margin-bottom: 10px; }
+        .server-badge { background-color: #3498db; color: white; padding: 10px 20px; border-radius: 50px; display: inline-block; font-weight: bold; margin-top: 20px; }
+        p { color: #7f8c8d; }
+        .status { color: #27ae60; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Welcome Hashim</h1>
+        <p>This request is securely served by your private cloud infrastructure.</p>
+        <div class="server-badge">WEB-01 (Primary)</div>
+        <p style="margin-top: 20px;">System Status: <span class="status">● OPERATIONAL</span></p>
+    </div>
+</body>
+</html>
+EOF`
+```
 
-
+* **On Web-02:** 
+```
+sudo tee /var/www/html/index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Portal</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; border-top: 5px solid #e67e22; }
+        h1 { color: #2c3e50; margin-bottom: 10px; }
+        .server-badge { background-color: #e67e22; color: white; padding: 10px 20px; border-radius: 50px; display: inline-block; font-weight: bold; margin-top: 20px; }
+        p { color: #7f8c8d; }
+        .status { color: #27ae60; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Welcome Hashim</h1>
+        <p>This request is securely served by your private cloud infrastructure.</p>
+        <div class="server-badge">WEB-02 (Replica)</div>
+        <p style="margin-top: 20px;">System Status: <span class="status">● OPERATIONAL</span></p>
+    </div>
+</body>
+</html>
+EOF
+```
 
 ---
 
@@ -141,35 +212,25 @@ Before installing HAProxy, we optimized the Linux Kernel to handle high traffic 
 1. **Create Custom Config File:**
 ```bash
 sudo nano /etc/sysctl.d/30-hapee-2.2.conf
-
 ```
 
 
 2. **Add Tuning Parameters:**
 ```ini
-# Allow HAProxy to bind to IPs that don't exist yet (Critical for Failover)
-net.ipv4.ip_nonlocal_bind = 1
-
-# Increase Port Range (Allow 64k connections instead of 28k)
-net.ipv4.ip_local_port_range = 1024 65023
-
-# Protect against SYN Flood Attacks
-net.ipv4.tcp_max_syn_backlog = 60000
-net.core.somaxconn = 60000
-
-# Fast recycling of closed connections
 net.ipv4.tcp_tw_reuse = 1
-
+net.ipv4.ip_local_port_range = 1024 65023
+net.ipv4.tcp_max_syn_backlog = 60000
+net.ipv4.tcp_fin_timeout = 30
+net.ipv4.tcp_synack_retries = 3
+net.ipv4.ip_nonlocal_bind = 1
+net.core.somaxconn = 60000
 ```
 
 
 3. **Apply Settings:**
 ```bash
 sudo sysctl --system
-
 ```
-
-
 
 ---
 
@@ -184,7 +245,6 @@ sudo apt remove nginx -y
 # Install HAProxy
 sudo apt update
 sudo apt install haproxy -y
-
 ```
 
 #### 2. Generate SSL Certificate (HTTPS)
@@ -199,7 +259,6 @@ sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 
 # Combine into PEM file (Required format for HAProxy)
 cat /etc/ssl/certs/haproxy.crt /etc/ssl/private/haproxy.key | sudo tee /etc/ssl/certs/haproxy.pem
-
 ```
 
 #### 3. The Configuration File (The Brain) 🧠
@@ -270,14 +329,12 @@ backend http_back-80
     # Define Servers (WS01/WS02 are internal code names for cookies)
     server web-01 192.168.50.10:80 cookie WS01 check fall 3 rise 2
     server web-02 192.168.50.11:80 cookie WS02 check fall 3 rise 2
-
 ```
 
 #### 4. Restart HAProxy
 
 ```bash
 sudo systemctl restart haproxy
-
 ```
 
 ---
